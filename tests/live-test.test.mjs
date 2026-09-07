@@ -28,10 +28,12 @@ test('worker timeout kills execution once and never retries', async () => {
   let starts = 0, kills = 0;
   const result = await runProviderWorker('rd', { filePath: 'test.wav' }, {
     timeoutMs: 5,
+    key: 'test-only-worker-key',
     launch: (_path, args, options) => {
       starts++;
       assert.deepEqual(args, ['rd','test.wav']);
       assert.deepEqual(options.stdio, ['ignore','ignore','ignore','ipc']);
+      assert.equal(options.env.REALITY_DEFENDER_API_KEY, 'test-only-worker-key');
       const child = new EventEmitter();
       child.kill = () => { kills++; queueMicrotask(() => child.emit('close', null)); };
       return child;

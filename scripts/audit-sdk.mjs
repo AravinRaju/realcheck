@@ -33,5 +33,5 @@ if (entry) {
     }
   }
   await inspect(directory);
-  console.log('Inspect these exact declarations and one real scan before implementing the disabled adapter. This audit does not enable live mapping.');
+  console.log('SDK declarations inspected locally. Live verification is separate: run the one-off commands in an authorized environment and review their redacted responses.');
 }

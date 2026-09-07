@@ -2,7 +2,118 @@
 
 Project: C:\Users\aravi\realcheck. Both private key variables load. No key values, uploaded media, or raw provider responses are recorded here.
 
+## User-run website end-to-end check — 2026-09-07
+
+The user confirmed that the live website works on port 3001. This is a
+user-run end-to-end check of the website and backend, not an accuracy benchmark
+or independent agent observation. No new raw provider responses, transcript,
+recording, or performance measurements were supplied or recorded.
+
+This supersedes the earlier port-3000 startup blocker for the working website.
+Transcription remains unverified and requires user review/correction before
+wording checks. Deepfake detection remains separate. Provider model/settings,
+fixture isolation, and no automatic retry/fallback behavior are unchanged.
+No provider calls were made by the agent to repeat the user's check.
+
+## Current investigation: transcript accuracy and stale server — 2026-09-07
+
+The user reports differing sentences and wording outcomes for the identical
+recording. The earlier Groq success is evidence of API connectivity, not accuracy.
+Transcription is now explicitly unverified and wording checks require local user
+review/correction and confirmation. Detection remains independent and its
+user-reported AUTHENTIC verification is retained for SDK 0.1.19.
+
+The user identified port 3000 as PID 14860 and reported /api/config with
+mode=fixture, detectionVerified=false, and both providers configured. That is
+consistent with an older loaded server or another checkout, not the current
+implementation with only its mode changed. The precise running path remains
+unconfirmed because Windows denied agent process inspection. Browser permission
+was declined; the agent did not bypass it or read the private UI transcript.
+
+Offline interception using the supplied 13,794-byte Ogg recording confirmed
+matching SHA-256 hashes for the original, temporary copy, Groq multipart audio,
+and bytes passed to the installed SDK's upload transport. Zero external calls
+were made and the original was unchanged. This establishes the inspected code
+path, not bytes from historical live requests or the inaccessible selected tab.
+
+The inspected checkout has no random/demo selection, live fixture fallback,
+scam likelihood/score, automatic upload on refresh, or result cache. The provider
+text is returned without rewriting. Previously wording checks ran immediately
+on unreviewed text; this is fixed. The current request trace checks a selected
+file hash, server upload hash, Groq input hash, raw returned text hash, and exact
+rendered text against one request ID. RD also reports the temporary file hash
+immediately before calling the pinned SDK. No raw response, transcript, recording
+or hash is logged; evidence is request-local and discarded with the result.
+The RD hash is an SDK-input check, not packet capture. Offline tests intercepted
+the actual SDK upload method to verify that this version reads those bytes unchanged.
+
+Groq settings remain whisper-large-v3-turbo, temperature=0, verbose_json, no prompt,
+and no forced language. No local conversion or audio preprocessing occurs.
+Ogg pages and Opus identification pass existing validation; full decoding was
+not checked because ffmpeg/ffprobe are unavailable. No model/preprocessing changes,
+LLM repair, repeated live scans, result caching, or hardcoded verdicts were added.
+
+Read docs/server-restart.md for replacing only PID 14860 and checking the new
+process, checkout, mode, and SDK readiness before any further upload.
+
+## Historical connectivity check: user-run verification succeeded — 2026-09-07
+
+The user reported successful manual live checks using the supplied WhatsApp Ogg
+recording from Downloads:
+
+- Reality Defender SDK 0.1.19 returned AUTHENTIC, mapped to Unlikely deepfake.
+- Groq transcription succeeded with 57 transcript characters and English language.
+
+These are user-reported results from the user's authorized terminal. The agent
+did not execute these requests or independently inspect raw provider responses.
+This verifies the reported AUTHENTIC path and successful transcription; it does
+not establish accuracy or live coverage of other statuses, images, or UI uploads.
+
+The installed adapter is enabled in live mode and both live-verification flags
+are true. Fixture remains the default mode, with explicitly authored results,
+no provider calls, and no fallback from live failures. The UI no longer says
+manual verification is pending. See manual-verification.md for starting the
+backend in live mode and testing one website upload. No agent network requests
+or push were made. All checkpoints below are historical and superseded where
+they describe installation or live verification as incomplete.
+
 ## Installation and access
+
+### SDK implementation checkpoint — 2026-09-07
+
+After the user installed the SDK locally, version 0.1.19 and the exact dependency
+and lockfile pin were inspected. Its TypeScript result/options/error types and
+installed formatter, polling, upload and Axios transport implementations were
+reviewed. The user authorized implementing the adapter and deferring live
+verification to manual commands. This supersedes the earlier implementation
+gate below; it does not establish a successful provider response.
+
+The adapter now maps only SDK overall MANIPULATED and AUTHENTIC, treats pending,
+unknown and malformed results as unavailable, and runs RD in the bounded worker.
+Fixture mode remains the default. No external network request was made in this
+implementation session. Both providers still require manual live verification;
+see manual-verification.md. Earlier checkpoints below are preserved as history.
+
+### Continuation from 84c8bf1 — 2026-09-07
+
+The checkout was clean at `84c8bf1`. One unauthenticated transport check per
+service (GitHub, npm, Reality Defender, and Groq), each bounded to 8 seconds
+with no application retries, failed with `fetch failed` / `EACCES`. No HTTP
+response was received. Both private keys were confirmed configured without
+printing their values. The supplied WhatsApp Ogg recording exists in Downloads
+(13,794 bytes); it was not submitted or modified in this continuation.
+
+The local SDK audit still reports the package absent. In accordance with the
+user's instruction to stop after network failure, no npm installation or live
+provider request followed these failed checks. No exact installed types or
+actual detection/transcription responses are available to inspect; mapping
+remains disabled. No secrets were printed, no network retries were made, and
+no push was performed. This session's restricted network and approval policy
+`never` provide no supported escalation path. Installation and live verification
+remain blocked until backend network access is available.
+
+The installation and provider attempts described below belong to the earlier
+checkpoint, not this continuation.
 
 One installation attempt, with npm retries disabled:
 

@@ -119,11 +119,12 @@ test('fixtures never invoke live providers and remain labelled', async () => {
     const result = await analyze(audioUpload(), { mode: 'fixture', detectionFixture: label }, { detect: fail, transcribe: fail, fixtureDelay: 0 });
     assert.equal(result.fixture, true);
     assert.equal(result.transcription.status, 'complete');
-    assert.ok(result.content.findings.length > 0);
+    assert.equal(result.content.findings.length, 0);
+    assert.equal(result.transcription.review, 'fixture');
     assert.equal(result.authenticity.status, label === 'unavailable' ? 'unavailable' : 'complete');
   }
 });
-test('detection failure preserves successful transcription and warning rules', async () => {
+test('detection failure preserves unverified transcription while wording checks remain paused', async () => {
   const result = await analyze(audioUpload(), { mode: 'live' }, {
     detect: () => { throw new ProviderError('timeout'); },
     transcribe: async () => ({ text: 'Send me the verification code.', language: 'english' }),
@@ -131,7 +132,9 @@ test('detection failure preserves successful transcription and warning rules', a
   assert.equal(result.fixture, false);
   assert.equal(result.authenticity.label, 'Analysis unavailable');
   assert.equal(result.transcription.status, 'complete');
-  assert.equal(result.content.findings.length, 1);
+  assert.equal(result.content.findings.length, 0);
+  assert.equal(result.content.status, 'not_evaluated');
+  assert.equal(result.transcription.review, 'unverified');
 });
 test('transcription failure preserves detection and does not imply safe content', async () => {
   const result = await analyze(audioUpload(), { mode: 'live' }, {
@@ -171,10 +174,10 @@ test('provider transcript extras cannot override application status or leak to t
     detect: async () => ({ label: 'Unclear' }),
     transcribe: async () => ({ text: 'Hello', language: 'english', status: 'unavailable', privateMetadata: 'not for client' }),
   });
-  assert.deepEqual(result.transcription, { status: 'complete', text: 'Hello', language: 'english' });
+  assert.deepEqual(result.transcription, { status: 'complete', text: 'Hello', language: 'english', review: 'unverified' });
 });
-test('live detection gate blocks unverified SDK contract even when a key exists', async () => {
-  await assert.rejects(detectManipulation({}, 'test-only'), error => error.code === 'sdk_contract_unverified');
+test('live detection rejects a missing temporary file path before worker execution', async () => {
+  await assert.rejects(detectManipulation({}, 'test-only'), error => error.code === 'invalid_file');
 });
 test('Groq sends only audio using documented Whisper multipart options', async () => {
   const result = await transcribeAudio(audioUpload(), 'test-only', {

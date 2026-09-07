@@ -85,7 +85,8 @@ test('HTTP fixture analysis preserves independent failure states and cleans actu
     assert.equal(body.fixture, true);
     assert.equal(body.authenticity.label, 'Analysis unavailable');
     assert.equal(body.transcription.status, 'complete');
-    assert.ok(body.content.findings.length);
+    assert.equal(body.content.findings.length, 0);
+    assert.equal(body.transcription.review, 'fixture');
     assert.deepEqual(await readdir(root), []);
     response = await post(base, wav(), { 'X-Fixture-Detection': 'unlikely', 'X-Fixture-Transcript': 'unavailable' });
     body = await response.json();

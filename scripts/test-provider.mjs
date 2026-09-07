@@ -17,7 +17,7 @@ if (!['rd','groq'].includes(provider) || !path || process.argv.length !== 4) {
     try {
       const result = await withTestFile(path, provider, upload => runProviderWorker(provider, upload));
       console.log(JSON.stringify(result, null, 2));
-      if (result.outcome === 'failed') process.exitCode = 1;
+      if (result.outcome === 'failed' || result.error) process.exitCode = 1;
     } catch (error) {
       console.error(JSON.stringify({ provider, outcome: 'not_run',
         error: error instanceof ValidationError ? 'invalid_media' : ['ENOENT','EACCES','audio_required','not_a_file'].includes(error.code || error.message) ? (error.code || error.message) : 'file_error' }));

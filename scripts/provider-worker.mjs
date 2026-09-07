@@ -3,13 +3,18 @@ import { extname } from 'node:path';
 import { loadLocalEnv } from '../lib/config.mjs';
 import { transcribeAudio } from '../lib/providers.mjs';
 import { formats } from '../lib/media.mjs';
+import { mapRealityDefenderResult } from '../lib/rd-result.mjs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
 const [provider, path] = process.argv.slice(2);
+const diagnostic = {};
 const respond = message => new Promise(resolve => {
-  if (process.send) process.send({ provider, ...message }, resolve);
+  if (process.send) process.send({ provider, ...diagnostic, ...message }, resolve);
   else resolve();
 });
 const safeErrors = new Set(['EACCES','ECONNREFUSED','ENOTFOUND','ETIMEDOUT','ECONNRESET','network','timeout','invalid_response',
-  'missing_key','unauthorized','server_error','invalid_file','upload_failed','not_found','unknown_error','sdk_missing']);
+  'missing_key','unauthorized','invalid_request','server_error','invalid_file','file_too_large','upload_failed','not_found','unknown_error','sdk_missing']);
 let bytes;
 try {
   loadLocalEnv();
@@ -19,7 +24,16 @@ try {
     let sdk;
     try { sdk = await import('@realitydefender/realitydefender'); }
     catch { throw Object.assign(new Error(), { code: 'sdk_missing' }); }
+    const require = createRequire(import.meta.url);
+    const sdkVersion = require(join(dirname(require.resolve('@realitydefender/realitydefender')), '../package.json')).version;
+    if (sdkVersion !== '0.1.19') throw Object.assign(new Error(), { code: 'invalid_response' });
     if (typeof sdk.RealityDefender !== 'function') throw Object.assign(new Error(), { code: 'invalid_response' });
+    if (/^[0-9a-f-]{36}$/i.test(process.env.REALCHECK_TRACE_REQUEST_ID || '')) {
+      diagnostic.traceRequestId = process.env.REALCHECK_TRACE_REQUEST_ID;
+      const input = await readFile(path);
+      diagnostic.inputSha256 = createHash('sha256').update(input).digest('hex');
+      input.fill(0);
+    }
     const client = new sdk.RealityDefender({ apiKey: key });
     // Documented API; one detect invocation (one upload). Normal result polling
     // is bounded. There is no application-level retry after an error.
@@ -28,8 +42,9 @@ try {
     if (!status) throw Object.assign(new Error(), { code: 'invalid_response' });
     const fields = Object.fromEntries(Object.entries(result).filter(([name]) => /^[a-zA-Z][a-zA-Z0-9_]{0,60}$/.test(name))
       .map(([name, value]) => [name, value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value]));
-    await respond({ outcome: 'response_received', providerStatus: status, responseFields: fields,
-      note: 'Raw SDK status only; no authenticity mapping or threshold applied.', retryAttempted: false });
+    await respond({ outcome: 'response_received', sdkVersion, providerStatus: status, responseFields: fields,
+      ...mapRealityDefenderResult(result),
+      note: 'SDK overall status mapping; no score threshold. Live verification requires reviewing this response.', retryAttempted: false });
   } else if (provider === 'groq') {
     bytes = await readFile(path);
     const extension = extname(path).slice(1);

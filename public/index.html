@@ -46,7 +46,17 @@
       <p class="content-intro">English-language phrase rules highlight requests to review. They do not decide whether a message is a scam.</p>
       <div id="transcript-loading" class="transcript-loading" role="status" hidden><span class="spinner small" aria-hidden="true"></span><span id="transcript-loading-text">Transcribing audio…</span></div>
       <div id="transcript-error" class="service-error" role="status" hidden><h3>Analysis unavailable</h3><p id="transcript-error-detail"></p><p>Transcript rules were not run. The authenticity result above is independent.</p></div>
-      <div id="transcript-result" hidden><span id="transcript-source" class="result-source"></span><blockquote id="transcript"></blockquote><p class="transcript-note">Check the words against the recording. Transcription and phrase matching can miss context or make mistakes.</p><p id="content-summary" class="content-summary"></p><ul id="findings" class="findings"></ul></div>
+      <div id="transcript-result" hidden>
+        <span id="transcript-source" class="result-source"></span>
+        <p id="transcript-status" class="transcript-note">UNVERIFIED TRANSCRIPTION — Listen to the original audio above. Correct only words you can hear; leave uncertain speech out.</p>
+        <details><summary>Original provider text (unverified)</summary><blockquote id="transcript"></blockquote></details>
+        <label for="transcript-edit">Review or correct the transcript</label>
+        <textarea id="transcript-edit" rows="5" maxlength="100000" spellcheck="false" autocomplete="off" aria-describedby="transcript-status"></textarea>
+        <label class="review-confirmation"><input id="review-confirm" type="checkbox"> <span id="review-confirm-label">I listened to the original and reviewed/corrected these words.</span></label>
+        <button id="check-wording" type="button" class="primary-button" disabled>Run wording checks on reviewed text</button>
+        <p id="trace-status" class="transcript-note"></p>
+        <p id="content-summary" class="content-summary"></p><ul id="findings" class="findings"></ul>
+      </div>
     </section>
     <section class="notes" aria-label="Using RealCheck"><div><span>01</span><h3>Original is best.</h3><p>Use the original file when possible. Ask for a clearer image or recording if a result is unclear.</p></div><div><span>02</span><h3>Two separate questions.</h3><p>A genuine voice can make a suspicious request. A detection result does not establish anyone’s intent.</p></div><div><span>03</span><h3>Pause before acting.</h3><p>Verify unexpected requests with the person or organization through a contact method you already trust.</p></div></section>
     <details class="privacy"><summary>Where does my file go?</summary><p id="provider-notice">Fixture mode uses no external providers. RealCheck temporarily receives your upload for file validation.</p><p>RealCheck removes its temporary file after success, failure, or an interrupted upload. Browser previews are released when you replace the file or leave. No upload history is kept. Provider storage and retention are separate from this local cleanup.</p></details>

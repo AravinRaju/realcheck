@@ -1,6 +1,11 @@
 {
-  "name": "realcheck", "version": "0.1.0", "private": true, "type": "module",
-  "engines": { "node": ">=22.13" },
+  "name": "realcheck",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node server.mjs",
     "dev": "node server.mjs",
@@ -11,5 +16,8 @@
     "check:env": "node scripts/check-env.mjs",
     "scan:rd": "node scripts/test-provider.mjs rd",
     "transcribe:groq": "node scripts/test-provider.mjs groq"
+  },
+  "dependencies": {
+    "@realitydefender/realitydefender": "0.1.19"
   }
 }
