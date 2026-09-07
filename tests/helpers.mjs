@@ -8,4 +8,3 @@ export function wav() {
   return data;
 }
 export const audioUpload = () => ({ bytes: wav(), metadata: { kind: 'audio', extension: 'wav', mime: 'audio/wav' } });
-

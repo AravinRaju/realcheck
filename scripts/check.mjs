@@ -19,4 +19,3 @@ for (const file of ['public/app.js', 'public/index.html', 'public/styles.css']) 
   if (/\b(?:rd_[0-9a-f]{16}|gsk_[A-Za-z0-9]{12})/.test(text)) throw new Error('Credential-shaped text in browser asset');
 }
 console.log('Syntax and frontend wiring verified for ' + sources.length + ' source files.');
-

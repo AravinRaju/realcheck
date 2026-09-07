@@ -14,4 +14,3 @@ await Promise.all(Object.entries(endpoints).map(async ([service, url]) => {
   }
 }));
 // A 401/403/405 proves transport reachability, not credential validity.
-

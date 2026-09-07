@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { loadLocalEnv } from './lib/config.mjs';
 import { validateMetadata, withTemporaryUpload, ValidationError } from './lib/media.mjs';
 import { analyze } from './lib/analyze.mjs';
 import { DETECTION_CONTRACT_VERIFIED } from './lib/providers.mjs';
@@ -72,8 +73,8 @@ export function createServer(env = process.env, dependencies = {}) {
   return server;
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  loadLocalEnv();
   const port = Number(process.env.PORT || 3000);
   const server = createServer();
   server.listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/'));
 }
-

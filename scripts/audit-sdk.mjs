@@ -35,4 +35,3 @@ if (entry) {
   await inspect(directory);
   console.log('Inspect these exact declarations and one real scan before implementing the disabled adapter. This audit does not enable live mapping.');
 }
-

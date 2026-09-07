@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createServer } from '../server.mjs';
+import { wav } from './helpers.mjs';
+
+async function withServer(env, fn, dependencies = {}) {
+  const root = await mkdtemp(join(tmpdir(), 'realcheck-http-test-'));
+  const server = createServer(env, { tempRoot: root, fixtureDelay: 0, ...dependencies });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try { await fn('http://127.0.0.1:' + server.address().port, root); }
+  finally { await new Promise(resolve => server.close(resolve)); await rm(root, { recursive: true, force: true }); }
+}
+const post = (base, body = wav(), headers = {}) => fetch(base + '/api/analyze', {
+  method: 'POST', headers: { 'Content-Type': 'audio/wav', 'X-File-Name': 'recording.wav', ...headers },
+  body, signal: AbortSignal.timeout(3000),
+});
+test('HTTP serves the app and config without serving secrets or source files', async () => {
+  await withServer({ REALCHECK_MODE: 'fixture', GROQ_API_KEY: 'test-only-private' }, async base => {
+    const page = await fetch(base);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /RealCheck/);
+    assert.match(page.headers.get('content-security-policy'), /script-src 'self'/);
+    const config = await (await fetch(base + '/api/config')).text();
+    assert.ok(!config.includes('test-only-private'));
+    for (const path of ['/.env','/.env.example','/.git/config','/lib/providers.mjs','/uploads/recording.wav']) {
+      assert.equal((await fetch(base + path)).status, 404);
+    }
+  });
+});
+test('HTTP fixture analysis preserves independent failure states and cleans actual temp files', async () => {
+  await withServer({ REALCHECK_MODE: 'fixture' }, async (base, root) => {
+    let response = await post(base, wav(), { 'X-Fixture-Detection': 'unavailable', 'X-Fixture-Transcript': 'warning' });
+    assert.equal(response.status, 200);
+    let body = await response.json();
+    assert.equal(body.fixture, true);
+    assert.equal(body.authenticity.label, 'Analysis unavailable');
+    assert.equal(body.transcription.status, 'complete');
+    assert.ok(body.content.findings.length);
+    assert.deepEqual(await readdir(root), []);
+    response = await post(base, wav(), { 'X-Fixture-Detection': 'unlikely', 'X-Fixture-Transcript': 'unavailable' });
+    body = await response.json();
+    assert.equal(body.authenticity.label, 'Unlikely deepfake');
+    assert.equal(body.transcription.label, 'Analysis unavailable');
+    assert.equal(body.content.status, 'not_evaluated');
+    assert.deepEqual(await readdir(root), []);
+  });
+});
+test('HTTP rejects unsupported files, forged content, invalid scenarios and cross-origin requests', async () => {
+  await withServer({ REALCHECK_MODE: 'fixture' }, async (base, root) => {
+    assert.equal((await post(base, wav(), { 'X-File-Name': 'video.mp4' })).status, 400);
+    assert.equal((await post(base, Buffer.from('not audio'))).status, 400);
+    assert.equal((await post(base, wav(), { 'X-Fixture-Detection': 'arbitrary' })).status, 400);
+    assert.equal((await post(base, wav(), { Origin: 'https://untrusted.example' })).status, 403);
+    assert.deepEqual(await readdir(root), []);
+  });
+});
+test('HTTP live mode with missing keys returns independent unavailability, never requested fixtures', async () => {
+  await withServer({ REALCHECK_MODE: 'live' }, async (base, root) => {
+    const response = await post(base, wav(), { 'X-Fixture-Detection': 'unlikely', 'X-Fixture-Transcript': 'warning' });
+    const body = await response.json();
+    assert.equal(body.mode, 'live'); assert.equal(body.fixture, false);
+    assert.equal(body.authenticity.label, 'Analysis unavailable');
+    assert.equal(body.transcription.label, 'Analysis unavailable');
+    assert.equal(body.content.status, 'not_evaluated');
+    assert.deepEqual(await readdir(root), []);
+  });
+});
