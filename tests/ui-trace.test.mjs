@@ -92,6 +92,21 @@ test('built panel preserves playback and requires review before local wording ch
   assert.equal(ui.get('findings').children.length, 0); assert.equal(ui.facts().requests, 1);
   assert.equal(ui.get('media-preview').children[0], audio); assert.equal(ui.get('auth-label').textContent, 'Unlikely deepfake');
 });
+
+test('website and built panel display only sanitized transcription failure codes and retain detection', async () => {
+  for (const panel of [false, true]) {
+    for (const code of ['http_400', 'http_429', 'timeout', 'network', 'invalid_response', 'private transcript <script>']) {
+      const ui = await harness({ panel, tamper: result => ({ ...result, transcription: { status: 'unavailable', code } }) });
+      await ui.choose(); const audio = ui.get('media-preview').children[0]; await ui.submit();
+      const expected = code.startsWith('private') ? 'internal' : code;
+      assert.ok(ui.get('transcript-error-detail').textContent.includes('Failure code: ' + expected + '.'));
+      assert.doesNotMatch(ui.get('transcript-error-detail').textContent, /private|<script>/);
+      assert.equal(ui.get('auth-label').textContent, 'Unlikely deepfake');
+      assert.equal(ui.get('check-wording').disabled, true); assert.equal(ui.get('review-confirm').checked, false);
+      assert.equal(ui.get('media-preview').children[0], audio); assert.equal(ui.facts().requests, 1);
+    }
+  }
+});
 test('panel displays the failed configuration step without leaking raw errors or submitting media', async () => {
   for (const [configReply, expected] of [
     [() => { throw new Error('private diagnostic'); }, /no HTTP response/],

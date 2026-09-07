@@ -22,6 +22,26 @@ const post = (base, body = wav(), headers = {}) => fetch(base + '/api/analyze', 
   body, signal: AbortSignal.timeout(3000),
 });
 
+test('HTTP preserves successful detection and exposes only the sanitized Groq code while logging failure details', async () => {
+  const logs = [];
+  await withServer({ REALCHECK_MODE: 'live', GROQ_API_KEY: 'private synthetic key' }, async (base, root) => {
+    const response = await post(base);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.authenticity.label, 'Unlikely deepfake');
+    assert.equal(result.transcription.code, 'http_400');
+    assert.equal(result.transcription.stage, undefined); assert.equal(result.transcription.httpStatus, undefined);
+    assert.equal(result.content.status, 'not_evaluated');
+    assert.equal(logs.length, 1); assert.equal(JSON.parse(logs[0]).httpStatus, 400);
+    assert.doesNotMatch(JSON.stringify(result) + logs[0], /private synthetic|private raw/);
+    assert.deepEqual(await readdir(root), []);
+  }, {
+    detect: async () => ({ label: 'Unlikely deepfake' }),
+    transcribe: (upload, key) => createTranscriber()(upload, key, { fetcher: async () => new Response('private raw', { status: 400 }) }),
+    providerLogger: line => logs.push(line),
+  });
+});
+
 test('HTTP rejects inherited formats and oversized metadata using headers alone', async () => {
   await withServer({ REALCHECK_MODE: 'live' }, async (base, root) => {
     for (const name of ['constructor', 'x.__proto__', 'x.png']) {

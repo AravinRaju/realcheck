@@ -23,6 +23,9 @@ function serviceLimitDetail(result) {
     (Number.isSafeInteger(result.retryAfterSeconds) && result.retryAfterSeconds > 0
       ? ' Wait at least ' + result.retryAfterSeconds + ' seconds before trying this provider again.' : '');
 }
+function transcriptionFailureCode(code) {
+  return typeof code === 'string' && (['missing_key', 'timeout', 'network', 'invalid_response', 'internal', 'provider_error'].includes(code) || /^http_[45]\d{2}$/.test(code)) ? code : 'internal';
+}
 function clearPreview() {
   for (const audio of $('media-preview').querySelectorAll('audio')) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
   $('media-preview').replaceChildren();
@@ -133,6 +136,7 @@ function transcriptResult(result, content, fixture) {
     $('transcript-error-detail').textContent = fixture ? 'TEST FIXTURE — Simulated transcription failure. No audio was sent to Groq.' :
       result.code === 'missing_key' ? 'Transcription is not configured for this prototype.' :
       result.code === 'http_429' ? serviceLimitDetail(result) : 'Groq transcription did not complete. Try again later.';
+    if (!fixture) $('transcript-error-detail').textContent += ' Failure code: ' + transcriptionFailureCode(result.code) + '.';
     return;
   }
   $('transcript-result').hidden = false;

@@ -287,6 +287,31 @@ server on an occupied port. Preparation left generated extension assets on local
 
 ## Local verification
 
+### Provider failure diagnostics
+
+The user reports hosted detection succeeded but Groq transcription failed. The
+cause is not yet established. Groq failures already returned a sanitized code in
+the transcription result; the UI now displays that code (for example http_400,
+http_429, timeout or invalid_response) in both website and rebuilt side panel.
+Successful detection remains visible and wording checks remain blocked when
+transcription is unavailable.
+
+Live analysis logs one JSON record per failed provider to server stderr, with
+event=provider_failure, provider (groq or reality_defender), sanitized code,
+stage, httpStatus, timeoutCode and networkCode. Groq stages distinguish
+configuration, request, response_headers, response_body, response_validation and
+local cooldown. HTTP status is null when no status was received; a body timeout
+can have httpStatus=200. A local cooldown has null status, because it sent no new
+HTTP request. Timeout and network codes are allowlisted; unknown values are null.
+Unexpected exceptions use internal/unknown. Fixture mode emits no provider logs.
+
+No tokens, headers, URLs, filenames, media, hashes, transcripts, exception objects
+or raw provider responses are logged. Logs never trigger a retry. Logging failures
+do not replace independent provider results. After deploying this change, inspect
+Render runtime logs for provider_failure when an authorized check fails; logs
+cannot reconstruct previous failures. Rebuild/reload the extension for its UI
+change. No provider calls were made while testing this diagnostics change.
+
 `npm test` uses stub storage responses/providers and synthetic media: REST contract
 and failures, HTTP admission/lease/release/cleanup, origins, transcript review and
 independent results. `npm run check` checks syntax and wiring; existing tests build
