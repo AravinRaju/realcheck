@@ -7,6 +7,9 @@
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
     "audit:sdk": "node scripts/audit-sdk.mjs",
-    "check:access": "node scripts/check-access.mjs"
+    "check:access": "node scripts/check-access.mjs",
+    "check:env": "node scripts/check-env.mjs",
+    "scan:rd": "node scripts/test-provider.mjs rd",
+    "transcribe:groq": "node scripts/test-provider.mjs groq"
   }
 }

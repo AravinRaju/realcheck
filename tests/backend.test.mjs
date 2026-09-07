@@ -25,6 +25,16 @@ test('byte checks reject renamed text and truncated files', () => {
   assert.doesNotThrow(() => validateBytes(bytes, { extension: 'wav' }));
   assert.throws(() => validateBytes(bytes.subarray(0, 100), { extension: 'wav' }));
 });
+test('Ogg validation accepts Opus audio and rejects video or truncated pages', () => {
+  const page = Buffer.alloc(47);
+  page.write('OggS'); page[5] = 2; page.writeUInt32LE(1, 14); page[26] = 1; page[27] = 19;
+  page.write('OpusHead', 28);
+  assert.doesNotThrow(() => validateBytes(page, { extension: 'ogg' }));
+  assert.throws(() => validateBytes(page.subarray(0, 40), { extension: 'ogg' }));
+  const video = Buffer.from(page); video.fill(0, 28); video.write('theora', 29);
+  assert.throws(() => validateBytes(video, { extension: 'ogg' }));
+  assert.throws(() => validateBytes(Buffer.concat([page, video]), { extension: 'ogg' }));
+});
 test('temporary uploads cleaned after success, provider exception, invalid file and oversize stream', async () => {
   const root = await mkdtemp(join(tmpdir(), 'realcheck-test-'));
   try {

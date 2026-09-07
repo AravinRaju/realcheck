@@ -4,6 +4,8 @@ A local image/audio hackathon prototype with separate authenticity and suspiciou
 
 ## Start
 
+Permanent project location: C:\Users\aravi\Documents\realcheck. The complete directory was moved from Temp without overwriting the separate C:\Users\aravi\realcheck repository. Git history and the ignored .env were preserved byte-for-byte.
+
 Requires Node.js 22.13 or newer. There are no npm dependencies or install step for the offline prototype.
 
     npm start
@@ -28,7 +30,7 @@ REALCHECK_MODE is chosen on the server. Keep it as fixture during development. S
 
 ## What works
 
-- Drag/drop or file selection; one JPG/JPEG, PNG, WebP, MP3, WAV, or FLAC.
+- Drag/drop or file selection; one JPG/JPEG, PNG, WebP, MP3, WAV, FLAC, or Ogg (Opus/Vorbis audio).
 - Local image or audio preview; keyboard-accessible upload controls.
 - Server validation of filename, extension, MIME, byte signatures/headers, and size.
 - Images limited to 10 MiB and audio to 20 MiB. PNG dimensions are bounded on the server; browser image previews are limited to 40 million pixels. Header validation is not a complete media decoder.
@@ -53,6 +55,25 @@ Groq live transcription is implemented but NOT live-verified. With live mode, a 
 ## Provider contracts and first live verification
 
 Read docs/provider-contracts.md for official sources and the exact unresolved verification gate.
+
+The most recent npm SDK installation was attempted once with retries disabled and an 8-second fetch timeout; it failed with EACCES. The SDK is still not installed. Once network access is available, install it with the project's npm package manager:
+
+    npm install --save-exact @realitydefender/realitydefender --fetch-retries=0 --fetch-timeout=8000 --ignore-scripts --no-audit --no-fund
+
+Check that both private keys load without printing their values:
+
+    npm run check:env
+
+Run one SDK scan on a file you choose, or one Groq transcription:
+
+    npm run scan:rd -- "C:\path\recording.wav"
+    npm run transcribe:groq -- "C:\path\recording.wav"
+
+These commands load the project-root .env. They accept the same supported file formats as the UI; Groq requires audio. Each runs once, uses a temporary copy, preserves the original file, and removes its temporary copy after success, failure, or timeout. They isolate provider execution in a child process with a 60-second total deadline. SDK stdout/stderr is suppressed; only a sanitized status summary is printed. No key or transcript is printed, and the command never retries a failed call. Normal SDK result polling is limited to 10 attempts at 2-second intervals. The exact installed SDK and its internal transport behavior must still be inspected after installation; no application-level retry is added.
+
+The RD script returns the raw SDK status and field types for inspection, not an authenticity verdict. A response_received outcome means the SDK returned a response; inspect providerStatus to determine whether the provider completed an analysis or reported a processing failure. The UI's unverified detection gate remains in place. The Groq script reports success and transcript length without printing the recording's content.
+
+The supplied WhatsApp Ogg recording was located and validated as Opus audio. Both keys still reported missing in the preserved .env, so neither provider could be called with it. The recording remains in Downloads and is not committed.
 
     npm run audit:sdk
 
