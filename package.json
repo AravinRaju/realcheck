@@ -1,0 +1,13 @@
+{
+  "name": "realcheck", "version": "0.1.0", "private": true, "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "dev": "node --env-file-if-exists=.env.local server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "audit:sdk": "node scripts/audit-sdk.mjs",
+    "check:access": "node scripts/check-access.mjs"
+  }
+}
+
