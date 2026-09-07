@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from '../server.mjs';
 import { wav } from './helpers.mjs';
+import { budgets } from '../lib/budgets.mjs';
+import { createTranscriber } from '../lib/providers.mjs';
 
 async function withServer(env, fn, dependencies = {}) {
   const root = await mkdtemp(join(tmpdir(), 'realcheck-http-test-'));
@@ -26,9 +28,35 @@ test('HTTP serves the app and config without serving secrets or source files', a
     assert.match(page.headers.get('content-security-policy'), /script-src 'self'/);
     const config = await (await fetch(base + '/api/config')).text();
     assert.ok(!config.includes('test-only-private'));
+    assert.equal(JSON.parse(config).clientRequestTimeoutMs, budgets.clientMs);
     for (const path of ['/.env','/.env.example','/.git/config','/lib/providers.mjs','/uploads/recording.wav']) {
       assert.equal((await fetch(base + path)).status, 404);
     }
+  });
+});
+
+test('HTTP live rate limiting preserves detection and cleans uploads during cooldown', async () => {
+  let calls = 0;
+  const transcribe = createTranscriber();
+  await withServer({ REALCHECK_MODE: 'live', GROQ_API_KEY: 'test-only' }, async (base, root) => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await post(base);
+      assert.equal(response.status, 200); // Composite response: one provider succeeded.
+      const body = await response.json();
+      assert.equal(body.fixture, false);
+      assert.equal(body.authenticity.label, 'Unclear');
+      assert.equal(body.transcription.label, 'Analysis unavailable');
+      assert.equal(body.transcription.message, 'Service limit reached; try again later.');
+      assert.ok(body.transcription.retryAfterSeconds > 0);
+      assert.equal(body.content.status, 'not_evaluated');
+      assert.deepEqual(await readdir(root), []);
+    }
+    assert.equal(calls, 1);
+  }, {
+    detect: async () => ({ label: 'Unclear' }),
+    transcribe: (upload, key) => transcribe(upload, key, {
+      fetcher: async () => { calls++; return new Response('', { status: 429, headers: { 'Retry-After': '60' } }); },
+    }),
   });
 });
 test('HTTP fixture analysis preserves independent failure states and cleans actual temp files', async () => {

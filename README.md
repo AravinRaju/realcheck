@@ -15,7 +15,7 @@ Use PORT in the local environment configuration if port 3000 is occupied.
 
 ## Private configuration
 
-Open the .env file at the root of this project. It already contains blank placeholders:
+Open C:\Users\aravi\realcheck\.env privately. Both keys now load; their values have not been printed or committed. A fresh checkout uses these placeholders from .env.example:
 
     REALITY_DEFENDER_API_KEY=
     GROQ_API_KEY=
@@ -73,7 +73,7 @@ These commands load the project-root .env. They accept the same supported file f
 
 The RD script returns the raw SDK status and field types for inspection, not an authenticity verdict. A response_received outcome means the SDK returned a response; inspect providerStatus to determine whether the provider completed an analysis or reported a processing failure. The UI's unverified detection gate remains in place. The Groq script reports success and transcript length without printing the recording's content.
 
-The supplied WhatsApp Ogg recording was located and validated as Opus audio. Both keys still reported missing in the preserved .env, so neither provider could be called with it. The recording remains in Downloads and is not committed.
+On 2026-09-07, both keys loaded successfully without printing values. The supplied WhatsApp Ogg recording was located and validated as Opus audio. Each one-off command was run exactly once with the configured keys: Reality Defender stopped locally with sdk_missing (no scan submitted); Groq attempted its transcription endpoint and failed with EACCES (no transcript received). Neither command retried. Temporary copies were cleaned; the original recording remains in Downloads and is not committed. The website remains explicitly in fixture mode. See docs/live-verification.md for the installation command and blocker details.
 
     npm run audit:sdk
 
@@ -118,7 +118,7 @@ On 2026-09-07, one bounded 8-second transport probe per service returned fetch f
 - Reality Defender: api.prd.realitydefender.xyz/api/files/aws-presigned
 - Groq: api.groq.com/openai/v1/audio/transcriptions
 
-Neither key was configured when checked. Documentation was accessible through the separate documentation browser, which does not provide backend network access.
+Those initial probes preceded key configuration. Both keys are now configured, but the later authenticated Groq attempt still failed with EACCES. Documentation is accessible through the separate documentation browser, which does not provide backend network access. This session disables approvals, so the requested network-approval flow cannot be invoked here. No system permissions were changed.
 
 npm run check:access reruns one bounded transport probe per service, with no credentials and no media. HTTP 401, 403, or 405 means the host is reachable, not that credentials are valid.
 

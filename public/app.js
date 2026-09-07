@@ -7,6 +7,12 @@ const labels = {
   'Analysis unavailable': { state: 'unavailable', icon: '—', guidance: 'No authenticity analysis is available. Try again later. This says nothing about whether the file is manipulated.' },
 };
 let file = null, kind = null, previewUrl = null, previewReady = false, busy = false, mode = null, activeRequest = null;
+let clientRequestTimeoutMs = null;
+function serviceLimitDetail(result) {
+  return 'Service limit reached; try again later.' +
+    (Number.isSafeInteger(result.retryAfterSeconds) && result.retryAfterSeconds > 0
+      ? ' Wait at least ' + result.retryAfterSeconds + ' seconds before trying this provider again.' : '');
+}
 function clearPreview() {
   for (const audio of $('media-preview').querySelectorAll('audio')) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
   $('media-preview').replaceChildren();
@@ -78,6 +84,7 @@ function authenticityResult(result, fixture) {
   $('auth-detail').textContent = fixture ? 'This is the selected example state. No detection scan was used.' :
     result.code === 'sdk_contract_unverified' ? 'Live detection is disabled until the SDK contract and first real scan have been verified.' :
     result.code === 'missing_key' ? 'Detection is not configured for this prototype.' :
+    result.code === 'http_429' ? serviceLimitDetail(result) :
     label === 'Analysis unavailable' ? 'A service failure is separate from an inconclusive detection result.' : 'Review authenticity separately from what the message asks you to do.';
 }
 function markTranscript(text, findings) {
@@ -99,7 +106,8 @@ function transcriptResult(result, content, fixture) {
   if (result.status !== 'complete' || typeof result.text !== 'string') {
     $('transcript-error').hidden = false;
     $('transcript-error-detail').textContent = fixture ? 'TEST FIXTURE — Simulated transcription failure. No audio was sent to Groq.' :
-      result.code === 'missing_key' ? 'Transcription is not configured for this prototype.' : 'Groq transcription did not complete. Try again later.';
+      result.code === 'missing_key' ? 'Transcription is not configured for this prototype.' :
+      result.code === 'http_429' ? serviceLimitDetail(result) : 'Groq transcription did not complete. Try again later.';
     return;
   }
   $('transcript-result').hidden = false;
@@ -147,7 +155,7 @@ $('upload-form').addEventListener('submit', async event => {
   $('content-card').hidden = kind !== 'audio'; $('transcript-result').hidden = true; $('transcript-error').hidden = true; $('transcript-loading').hidden = false;
   $('transcript-loading-text').textContent = mode === 'fixture' ? 'Preparing the selected test transcript…' : 'Groq Whisper is transcribing the audio…';
   activeRequest = new AbortController();
-  const timeout = setTimeout(() => activeRequest?.abort(), 75000);
+  const timeout = setTimeout(() => activeRequest?.abort(), clientRequestTimeoutMs);
   try {
     const response = await fetch('/api/analyze', {
       method: 'POST', body: file, signal: activeRequest.signal,
@@ -171,6 +179,8 @@ try {
   if (!response.ok) throw new Error();
   const config = await response.json();
   if (!['fixture','live'].includes(config.mode)) throw new Error();
+  if (!Number.isInteger(config.clientRequestTimeoutMs) || config.clientRequestTimeoutMs < 1000 || config.clientRequestTimeoutMs > 120000) throw new Error();
+  clientRequestTimeoutMs = config.clientRequestTimeoutMs;
   mode = config.mode;
   $('fixture-controls').hidden = mode !== 'fixture';
   $('mode-banner').classList.toggle('live', mode === 'live');

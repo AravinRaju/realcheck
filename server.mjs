@@ -5,6 +5,7 @@ import { loadLocalEnv } from './lib/config.mjs';
 import { validateMetadata, withTemporaryUpload, ValidationError } from './lib/media.mjs';
 import { analyze } from './lib/analyze.mjs';
 import { DETECTION_CONTRACT_VERIFIED } from './lib/providers.mjs';
+import { budgets } from './lib/budgets.mjs';
 
 export const securityHeaders = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -29,7 +30,7 @@ export function createServer(env = process.env, dependencies = {}) {
     try { path = new URL(request.url, 'http://' + (request.headers.host || 'localhost')).pathname; }
     catch { json({ error: 'Invalid request' }, 400); return; }
     if (request.method === 'GET' && path === '/api/config') {
-      json({ mode, detectionVerified: DETECTION_CONTRACT_VERIFIED,
+      json({ mode, clientRequestTimeoutMs: budgets.clientMs, detectionVerified: DETECTION_CONTRACT_VERIFIED,
         detectionConfigured: !!env.REALITY_DEFENDER_API_KEY, transcriptionConfigured: !!env.GROQ_API_KEY }); return;
     }
     if (path === '/api/analyze') {
@@ -69,7 +70,8 @@ export function createServer(env = process.env, dependencies = {}) {
       response.end(request.method === 'HEAD' ? undefined : bytes);
     } catch { json({ error: 'Analysis unavailable' }, 503); }
   });
-  server.requestTimeout = 35000; server.headersTimeout = 10000;
+  // Node requestTimeout bounds receipt of the request, not provider processing.
+  server.requestTimeout = budgets.requestReceiveMs; server.headersTimeout = 10000;
   return server;
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

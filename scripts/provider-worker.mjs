@@ -38,9 +38,11 @@ try {
       language: typeof result.language === 'string' && /^[a-zA-Z -]{1,40}$/.test(result.language) ? result.language : null, retryAttempted: false });
   } else throw new Error('invalid_provider');
 } catch (error) {
-  const candidates = [error.cause?.code, error.code];
+  const candidates = [error.networkCode, error.cause?.code, error.code];
   const code = candidates.find(code => safeErrors.has(code) || /^http_\d{3}$/.test(code)) || 'provider_error';
-  await respond({ outcome: 'failed', error: code, retryAttempted: false });
+  await respond({ outcome: 'failed', error: code,
+    ...(code === 'http_429' ? { message: 'Service limit reached; try again later.', retryAfterSeconds: error.retryAfterSeconds ?? null } : {}),
+    retryAttempted: false });
 } finally {
   bytes?.fill(0);
   process.disconnect?.();
