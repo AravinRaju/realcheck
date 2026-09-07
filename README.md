@@ -4,7 +4,7 @@ A local image/audio hackathon prototype with separate authenticity and suspiciou
 
 ## Start
 
-Permanent project location: C:\Users\aravi\Documents\realcheck. The complete directory was moved from Temp without overwriting the separate C:\Users\aravi\realcheck repository. Git history and the ignored .env were preserved byte-for-byte.
+Canonical project location: C:\Users\aravi\realcheck. The destination's existing .git was retained. It had no commits or project files; the prototype's three commits were imported through a local Git fetch onto realcheck-consolidated, with prototype-import retaining the imported tip. All tracked files were verified (allowing Git's line-ending normalization), and the ignored .env was privately copied and verified byte-for-byte. C:\Users\aravi\Documents\realcheck is retained as a backup. No push was performed.
 
 Requires Node.js 22.13 or newer. There are no npm dependencies or install step for the offline prototype.
 
@@ -110,7 +110,7 @@ The browser automation runtime could not start in this environment (system path 
 
 ## Repository and access blockers
 
-This is an isolated offline Git repository because the supplied working directory was C:\Users\aravi (not a checkout and not writable for project creation). The requested GitHub repository could not be cloned. Its origin is recorded as https://github.com/AravinRaju/realcheck.git, but its existing files/history have NOT been fetched or reconciled. Do not force-push this branch over an existing repository.
+The prototype was initially built in an isolated offline repository because the supplied working directory was C:\Users\aravi (not a checkout and not writable for project creation). It is now consolidated into C:\Users\aravi\realcheck without replacing that repository's .git. The destination had an unborn main branch and no history or existing project files. The GitHub repository has not been fetched over the network, so any remote history still needs reconciliation before a push. Do not force-push.
 
 On 2026-09-07, one bounded 8-second transport probe per service returned fetch failed / EACCES for:
 - GitHub: github.com/AravinRaju/realcheck.git/info/refs?service=git-upload-pack
@@ -122,4 +122,4 @@ Neither key was configured when checked. Documentation was accessible through th
 
 npm run check:access reruns one bounded transport probe per service, with no credentials and no media. HTTP 401, 403, or 405 means the host is reachable, not that credentials are valid.
 
-Completed milestones are committed locally. No push has been made. Once an actual checkout is available, reconcile/cherry-pick the source changes against its history and verify again. Ask the user before pushing anything to GitHub.
+Completed milestones are committed locally on realcheck-consolidated. No push has been made. When GitHub access is available, inspect and reconcile remote history and verify again. Ask the user before pushing anything to GitHub. The TypeScript SDK remains uninstalled after the bounded npm EACCES failure; no Python SDK schema or unverified status mapping is substituted.
