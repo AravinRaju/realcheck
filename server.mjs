@@ -6,9 +6,10 @@ import { validateMetadata, withTemporaryUpload, ValidationError } from './lib/me
 import { analyze } from './lib/analyze.mjs';
 import { TRANSCRIPTION_LIVE_VERIFIED } from './lib/providers.mjs';
 import { detectionReadiness } from './lib/readiness.mjs';
-import { spawnSync } from 'node:child_process';
+import { hostingConfig, publicUsage } from './lib/hosting.mjs';
 import { budgets } from './lib/budgets.mjs';
 import { createHash, randomUUID } from 'node:crypto';
+import { configuredExtensionOrigin, extensionApiAccess } from './extension/server-access.mjs';
 
 export const securityHeaders = {
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -26,13 +27,9 @@ export function createServer(env = process.env, dependencies = {}) {
   let active = 0;
   const mode = env.REALCHECK_MODE || 'fixture';
   if (!['fixture', 'live'].includes(mode)) throw new Error('REALCHECK_MODE must be fixture or live.');
-  const projectPath = fileURLToPath(new URL('.', import.meta.url));
-  const git = args => spawnSync('git', args, { cwd: projectPath, encoding: 'utf8', windowsHide: true, timeout: 2000 });
-  const head = git(['rev-parse', 'HEAD']);
-  const changes = git(['status', '--porcelain']);
-  const identity = { pid: process.pid, projectPath, commit: /^[a-f0-9]{40}$/.test(head.stdout?.trim() || '') ? head.stdout.trim() : null,
-    workingTreeDirty: changes.status === 0 ? !!changes.stdout.trim() : null,
-    startedAt: new Date().toISOString(), implementation: 'sdk-0.1.19-transcript-review-v1' };
+  const extensionOrigin = configuredExtensionOrigin(env.REALCHECK_EXTENSION_ID);
+  const hosting = hostingConfig(env);
+  const admit = publicUsage({ ...hosting, enabled: hosting.enabled && mode === 'live' });
   const server = http.createServer(async (request, response) => {
     const json = (body, status = 200) => {
       response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json', ...(status >= 400 ? { Connection: 'close' } : {}) });
@@ -41,22 +38,32 @@ export function createServer(env = process.env, dependencies = {}) {
     let path;
     try { path = new URL(request.url, 'http://' + (request.headers.host || 'localhost')).pathname; }
     catch { json({ error: 'Invalid request' }, 400); return; }
-    if (request.method === 'GET' && path === '/api/config') {
+    const access = extensionApiAccess(request, path, extensionOrigin, hosting.origin);
+    if (access.denied) { json({ error: 'Use this website or the configured RealCheck extension.' }, 403); return; }
+    for (const [name, value] of Object.entries(access.headers)) response.setHeader(name, value);
+    if (access.preflight) { response.writeHead(204, securityHeaders); response.end(); return; }
+    if (['GET', 'POST'].includes(request.method) && path === '/api/config') {
+      if (request.method === 'POST' && (request.headers['transfer-encoding'] || Number(request.headers['content-length'] || 0) !== 0)) {
+        json({ error: 'Configuration handshake must not contain a body.' }, 400); return;
+      }
       const detection = detectionReadiness(env.REALITY_DEFENDER_API_KEY);
-      json({ mode, server: identity, clientRequestTimeoutMs: budgets.clientMs, detectionVerified: detection.verified,
+      json({ mode, scansEnabled: mode !== 'live' || hosting.enabled, clientRequestTimeoutMs: budgets.clientMs, detectionVerified: detection.verified,
+        sidePanel: { protocol: 1, configured: !!extensionOrigin, authorized: access.trusted },
         transcriptionVerified: TRANSCRIPTION_LIVE_VERIFIED,
         transcriptionReviewRequired: true,
         detectionContractVerified: detection.contractInspected, detectionReady: detection.ready,
-        detectionEnabled: mode === 'live' && detection.ready, detection,
+        detectionEnabled: mode === 'live' && hosting.enabled && detection.ready,
         detectionConfigured: detection.configured, transcriptionConfigured: !!env.GROQ_API_KEY?.trim() }); return;
     }
     if (path === '/api/analyze') {
       if (request.method !== 'POST') { json({ error: 'Method not allowed' }, 405); return; }
-      const expectedOrigin = 'http://' + request.headers.host;
-      if ((request.headers.origin && request.headers.origin !== expectedOrigin) || request.headers['sec-fetch-site'] === 'cross-site') {
-        json({ error: 'Upload from this website only.' }, 403); return;
+      // Origin checks run above, before either website or extension can upload.
+      if (mode === 'live' && !hosting.enabled) { json({ error: 'Analysis unavailable', message: 'Live checks are not enabled.' }, 503); return; }
+      if (active >= (hosting.origin ? 1 : 3)) { json({ error: 'Analysis unavailable', message: 'The prototype is busy. Try again shortly.' }, 503); return; }
+      if (mode === 'live') {
+        const admission = admit();
+        if (!admission.allowed) { json({ error: 'Analysis unavailable', message: admission.status === 429 ? 'The demo usage limit has been reached. Try later.' : 'Live checks are temporarily unavailable.' }, admission.status); return; }
       }
-      if (active >= 3) { json({ error: 'Analysis unavailable', message: 'The prototype is busy. Try again shortly.' }, 503); return; }
       active++;
       try {
         let name;
@@ -97,8 +104,8 @@ export function createServer(env = process.env, dependencies = {}) {
   return server;
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  loadLocalEnv();
-  const port = Number(process.env.PORT || 3000);
+  if (process.env.NODE_ENV !== 'production') loadLocalEnv();
+  const { port, host } = hostingConfig(process.env);
   const server = createServer();
-  server.listen(port, '127.0.0.1', () => console.log('Local: http://127.0.0.1:' + port + '/'));
+  server.listen(port, host, () => console.log('RealCheck server listening on configured address and port.'));
 }

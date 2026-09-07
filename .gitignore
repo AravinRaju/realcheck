@@ -19,3 +19,5 @@ verification/
 *.mov
 coverage/
 .DS_Store
+
+.data/

@@ -1,0 +1,25 @@
+/* Shared components, compact layout for a browser panel. */
+body { background: #fff; }
+.shell { max-width: 600px; padding: 0 16px; }
+header { min-height: 58px; }
+.brand { font-size: 19px; }
+.prototype, .intro { display: none; }
+main { display: flex; flex-direction: column; }
+.extension-notice { order: 5; margin: 0 0 18px; font-size: .875rem; color: var(--muted); }
+.extension-notice details { border-top: 1px solid var(--line); }
+.extension-notice p { margin: 8px 0; }
+#extension-id { overflow-wrap: anywhere; user-select: all; }
+.mode-banner { margin: 16px 0; padding: 9px 12px; }
+.workspace { grid-template-columns: 1fr; gap: 16px; }
+.upload-card { padding: 0 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; }
+.card-heading { margin-bottom: 12px; }
+.upload-card .section-label { display: none; }
+.dropzone { min-height: 124px; }
+.result-card, .content-card { padding: 16px; border-radius: 8px; }
+.empty-result { padding: 16px 0 4px; }
+.content-card { margin-top: 16px; }
+.content-heading { display: block; margin-bottom: 12px; }
+.content-heading .format-tag { display: none; }
+.auth-result h2 { font-size: 1.5rem; }
+.privacy { order: 4; margin: 16px 0 0; }
+footer { font-size: .8125rem; }

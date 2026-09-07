@@ -1,6 +1,48 @@
+Current hosting/config behavior is documented in [hosting.md](hosting.md). Process/path and request-header diagnostics below describe earlier local investigations and are no longer exposed by /api/config.
+
 # Live verification checkpoint — 2026-09-07
 
 Project: C:\Users\aravi\realcheck. Both private key variables load. No key values, uploaded media, or raw provider responses are recorded here.
+
+## Side-panel authorization handshake correction — 2026-09-07
+
+The user reported extension ID lbfnfcfbfiedpcihlklplieolhffpiol and the panel's
+authorization-validation error. Actual browser headers were unavailable. An
+offline reproduction confirmed the same error when GET /api/config contains no
+Origin: the backend returns HTTP 200 with configured=true, authorized=false.
+The origin-only check was correct; using a potentially originless GET as an
+extension authorization handshake was the contract mismatch.
+
+The panel now uses POST /api/config with no body. This configuration-only route
+requires the exact browser-supplied configured extension Origin, rejects a body,
+and never invokes providers. Normal website/terminal config GETs stay available
+without falsely authorizing the panel. Missing/null/foreign Origins and claimed
+ID headers do not grant access. Permissions and provider models are unchanged.
+
+Config diagnostics report only request method and Origin presence, alongside the
+existing authorization booleans. The panel identifies transport, HTTP, JSON,
+schema and authorization failures without exposing private bodies or raw errors.
+All 71 offline tests and syntax/build checks passed. No provider calls or push
+were made; browser-side confirmation after rebuild/restart remains user-run.
+Exact instructions are in extension/README.md.
+
+## Side-panel integration after baseline 1275b86 — 2026-09-07
+
+Baseline commit 1275b86 was confirmed locally. The Chrome side panel now uses
+the existing backend and the exact shared website app, review module and rules.
+Its requests are limited to 127.0.0.1:3001; the backend permits only the explicitly
+configured extension ID alongside existing same-origin website requests.
+Opening the panel checks readiness only. File submission remains user-triggered,
+transcription remains unverified, and review/correction is required for wording
+checks. Fixture mode is explicit and never substitutes for a failed live request.
+
+All 68 offline tests passed, including loopback HTTP origin/preflight/upload tests
+with stubbed providers and execution of the built panel UI in an in-memory DOM.
+These tests check request/hash tracing, keys staying server-side, review gating,
+audio-preview preservation, and independent detection. They are not a browser
+installation check or live extension verification. No external provider calls,
+browser installation, or push were performed. The user's working server was not
+stopped. See extension/README.md for installation and the required backend restart.
 
 ## User-run website end-to-end check — 2026-09-07
 

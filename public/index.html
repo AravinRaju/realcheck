@@ -5,63 +5,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Check media authenticity and review suspicious requests separately. RealCheck hackathon prototype.">
   <meta name="color-scheme" content="light">
-  <title>RealCheck — Pause before you share</title>
+  <title>RealCheck — Check a file</title>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
 <div class="shell">
-  <header><a class="brand" href="/" aria-label="RealCheck home"><span class="brand-icon" aria-hidden="true">r<span>c</span></span>realcheck<span class="brand-dot">.</span></a><span class="prototype">HACKATHON PROTOTYPE <i aria-hidden="true"></i></span></header>
+  <header><a class="brand" href="/" aria-label="RealCheck home"><span class="brand-icon" aria-hidden="true">R</span>RealCheck</a><span class="prototype">Image &amp; audio checks</span></header>
   <main>
     <section class="intro" aria-labelledby="headline">
-      <div class="eyebrow"><span></span>A LITTLE PAUSE. A BETTER DECISION.</div>
-      <h1 id="headline">Seeing isn’t always<br><em>believing.</em></h1>
-      <p class="lede">Check an image or audio clip. Review authenticity and<br class="desktop"> suspicious requests as two separate signals.</p>
+      <h1 id="headline">Check before you act.</h1>
+      <p class="lede">Check for manipulation. Review what the message asks.</p>
     </section>
     <div id="mode-banner" class="mode-banner" role="status">Connecting to RealCheck…</div>
     <div class="workspace">
       <section class="upload-card" aria-labelledby="upload-title">
-        <div class="card-heading"><div><span class="section-label">01 / YOUR FILE</span><h2 id="upload-title">Start with the source.</h2></div><span class="format-tag">IMAGE + AUDIO</span></div>
+        <div class="card-heading"><div><span class="section-label">Upload</span><h2 id="upload-title">Choose a file</h2></div><span class="format-tag"></span></div>
         <form id="upload-form" novalidate>
           <input id="file-input" class="visually-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,.mp3,.wav,.flac,.ogg" aria-label="Choose an image or audio file" aria-describedby="file-help file-error">
-          <button id="dropzone" type="button" class="dropzone" aria-describedby="file-help"><span class="upload-arrow" aria-hidden="true">↑</span><strong>Drop a file here</strong><span>or <span class="browse-link">browse your files</span></span><span class="formats">JPG, PNG, WebP · MP3, WAV, FLAC, Ogg</span></button>
+          <button id="dropzone" type="button" class="dropzone" aria-describedby="file-help"><strong>Drop an image or audio file</strong><span>or <span class="browse-link">browse your files</span></span><span class="formats">JPG, PNG, WebP · MP3, WAV, FLAC, Ogg</span></button>
           <div id="preview" hidden><div id="media-preview" class="media-preview"></div><div class="file-row"><div class="file-details"><strong id="file-name"></strong><span id="file-size"></span></div><button id="change-file" type="button" class="text-button">Change file</button></div></div>
           <p id="file-help" class="file-help">One file at a time. Images up to 10 MB; audio up to 20 MB.</p>
           <p id="file-error" class="file-error" role="alert" hidden></p>
           <fieldset id="fixture-controls" class="fixture-controls" hidden><legend>TEST FIXTURES · NO LIVE SCANS</legend><label for="detection-fixture">Authenticity example</label><select id="detection-fixture"><option value="unclear">Unclear</option><option value="likely">Likely deepfake</option><option value="unlikely">Unlikely deepfake</option><option value="unavailable">Analysis unavailable</option></select><div id="audio-fixture-row" hidden><label for="transcript-fixture">Transcript example</label><select id="transcript-fixture"><option value="warning">Suspicious requests</option><option value="ordinary">No matching requests</option><option value="nonenglish">Non-English transcript</option><option value="empty">Empty transcript</option><option value="unavailable">Transcription unavailable</option></select></div></fieldset>
-          <button id="analyze-button" class="primary-button" type="submit" disabled><span id="button-label">Choose a file to continue</span><span aria-hidden="true">↗</span></button>
+          <button id="analyze-button" class="primary-button" type="submit" disabled><span id="button-label">Choose a file to continue</span></button>
           <p id="upload-note" class="privacy-small">Temporary files are deleted after processing.</p>
         </form>
       </section>
-      <section id="auth-card" class="result-card" aria-labelledby="auth-title">
-        <span class="section-label">02 / AUTHENTICITY</span>
-        <div id="auth-empty" class="empty-result"><div class="signal-art" aria-hidden="true"><i></i><i></i><i></i><b>?</b></div><h2 id="auth-title">A signal. A next step.</h2><p>A manipulation-detection result<br>will appear here.</p></div>
+      <section id="auth-card" class="result-card" aria-label="Authenticity result" hidden>
+        <span class="section-label">Authenticity</span>
+        <div id="auth-empty" class="empty-result"><h2 id="auth-title">No result yet</h2><p>Choose a file and run a check to see the result.</p></div>
         <div id="auth-loading" class="loading" role="status" hidden><span class="spinner" aria-hidden="true"></span><h2 id="loading-title">Checking your file…</h2><p id="loading-copy">Keep this page open while we check.</p></div>
         <div id="auth-result" class="auth-result" tabindex="-1" aria-live="polite" hidden><span id="auth-source" class="result-source"></span><span id="auth-icon" class="verdict-icon" aria-hidden="true"></span><h2 id="auth-label"></h2><div class="guidance"><span>NEXT STEP</span><p id="auth-guidance"></p></div><p id="auth-detail" class="detail"></p></div>
         <div class="result-footnote"><i aria-hidden="true"></i>Detection is a signal, not proof.</div>
       </section>
     </div>
     <section id="content-card" class="content-card" aria-labelledby="content-title" hidden>
-      <div class="content-heading"><div><span class="section-label">03 / TRANSCRIPT &amp; REQUESTS</span><h2 id="content-title">What’s being asked?</h2></div><span class="format-tag">SEPARATE FROM AUTHENTICITY</span></div>
-      <p class="content-intro">English-language phrase rules highlight requests to review. They do not decide whether a message is a scam.</p>
+      <div class="content-heading"><div><span class="section-label">Audio review</span><h2 id="content-title">Review transcript</h2></div><span class="format-tag">Separate assessment</span></div>
       <div id="transcript-loading" class="transcript-loading" role="status" hidden><span class="spinner small" aria-hidden="true"></span><span id="transcript-loading-text">Transcribing audio…</span></div>
       <div id="transcript-error" class="service-error" role="status" hidden><h3>Analysis unavailable</h3><p id="transcript-error-detail"></p><p>Transcript rules were not run. The authenticity result above is independent.</p></div>
       <div id="transcript-result" hidden>
         <span id="transcript-source" class="result-source"></span>
         <p id="transcript-status" class="transcript-note">UNVERIFIED TRANSCRIPTION — Listen to the original audio above. Correct only words you can hear; leave uncertain speech out.</p>
-        <details><summary>Original provider text (unverified)</summary><blockquote id="transcript"></blockquote></details>
-        <label for="transcript-edit">Review or correct the transcript</label>
-        <textarea id="transcript-edit" rows="5" maxlength="100000" spellcheck="false" autocomplete="off" aria-describedby="transcript-status"></textarea>
-        <label class="review-confirmation"><input id="review-confirm" type="checkbox"> <span id="review-confirm-label">I listened to the original and reviewed/corrected these words.</span></label>
-        <button id="check-wording" type="button" class="primary-button" disabled>Run wording checks on reviewed text</button>
-        <p id="trace-status" class="transcript-note"></p>
-        <p id="content-summary" class="content-summary"></p><ul id="findings" class="findings"></ul>
+        <details><summary>Original transcript</summary><blockquote id="transcript"></blockquote></details>
+        <label for="transcript-edit">Transcript — edit any incorrect words</label>
+        <textarea id="transcript-edit" rows="3" maxlength="100000" spellcheck="false" autocomplete="off" aria-describedby="transcript-status"></textarea>
+        <label class="review-confirmation"><input id="review-confirm" type="checkbox"> <span id="review-confirm-label">I reviewed this transcript.</span></label>
+        <button id="check-wording" type="button" class="primary-button" disabled>Check wording</button>
+        <details class="trace-details"><summary>Check details</summary><p id="trace-status" class="transcript-note"></p></details>
+        <p id="content-summary" class="content-summary" hidden></p><ul id="findings" class="findings"></ul>
       </div>
     </section>
-    <section class="notes" aria-label="Using RealCheck"><div><span>01</span><h3>Original is best.</h3><p>Use the original file when possible. Ask for a clearer image or recording if a result is unclear.</p></div><div><span>02</span><h3>Two separate questions.</h3><p>A genuine voice can make a suspicious request. A detection result does not establish anyone’s intent.</p></div><div><span>03</span><h3>Pause before acting.</h3><p>Verify unexpected requests with the person or organization through a contact method you already trust.</p></div></section>
-    <details class="privacy"><summary>Where does my file go?</summary><p id="provider-notice">Fixture mode uses no external providers. RealCheck temporarily receives your upload for file validation.</p><p>RealCheck removes its temporary file after success, failure, or an interrupted upload. Browser previews are released when you replace the file or leave. No upload history is kept. Provider storage and retention are separate from this local cleanup.</p></details>
+    <details class="privacy"><summary>File privacy & providers</summary><p id="provider-notice">Fixture mode uses no external providers. RealCheck temporarily receives your upload for file validation.</p><p>RealCheck removes its temporary file after success, failure, or an interrupted upload. Browser previews are released when you replace the file or leave. No upload history is kept. Provider storage and retention are separate from this local cleanup.</p></details>
   </main>
-  <footer><span>Made for a more thoughtful internet.</span><span>Reality Defender · Groq Whisper · FTC-sourced rules</span></footer>
+  <footer>RealCheck checks media, not the sender’s identity.</footer>
 </div>
 </body>
 </html>

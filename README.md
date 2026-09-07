@@ -1,3 +1,5 @@
+Hosting preparation: see [docs/hosting.md](docs/hosting.md) for current configuration, public usage limits, and extension builds. Public process/path diagnostics described in historical verification notes have been removed. Nothing is deployed.
+
 # RealCheck
 
 A local image/audio hackathon prototype with separate authenticity and suspicious-request panels.
@@ -5,6 +7,12 @@ A local image/audio hackathon prototype with separate authenticity and suspiciou
 The user confirmed the live website works on port 3001 (2026-09-07). This is
 a user-run end-to-end check, not an accuracy benchmark. Transcription remains
 unverified; wording checks require review/correction and explicit confirmation.
+
+The optional Chrome side panel uses the same upload, results and transcript-review
+code with the existing backend on port 3001. Run `npm run build:extension` and
+follow [installation instructions](extension/README.md). Access requires its exact
+public extension ID in REALCHECK_EXTENSION_ID; provider keys stay server-side.
+The extension checks only files you select, after you click the check button.
 
 ## Start
 

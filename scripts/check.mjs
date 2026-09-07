@@ -1,7 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-const folders = ['lib', 'public', 'scripts', 'tests'];
+import { buildPanel } from '../extension/build.mjs';
+await buildPanel(undefined, process.env.REALCHECK_EXTENSION_BACKEND || 'http://127.0.0.1:3001');
+const folders = ['lib', 'public', 'scripts', 'tests', 'extension', 'extension/tests', 'extension/panel', 'extension/lib'];
 const sources = ['server.mjs'];
 for (const folder of folders) {
   for (const name of await readdir(folder)) if (/\.(mjs|js)$/.test(name)) sources.push(join(folder, name));

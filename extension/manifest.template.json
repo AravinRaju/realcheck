@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "RealCheck Side Panel",
+  "version": "0.1.0",
+  "description": "Review a file you choose with RealCheck. No automatic page scanning.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ],
+  "action": {
+    "default_title": "Open RealCheck"
+  },
+  "side_panel": {
+    "default_path": "panel/index.html"
+  },
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src http://127.0.0.1:3001; object-src 'none'; base-uri 'none'; frame-src 'none'"
+  }
+}

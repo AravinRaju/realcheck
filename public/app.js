@@ -9,13 +9,14 @@ const labels = {
 };
 let file = null, kind = null, previewUrl = null, previewReady = false, busy = false, mode = null, activeRequest = null;
 let clientRequestTimeoutMs = null;
+let scansEnabled = true;
 let review = null, selectionRevision = 0, activeResultId = null;
 const sha256 = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', value))].map(byte => byte.toString(16).padStart(2, '0')).join('');
 function resetReview() {
   review = null; activeResultId = null;
   $('transcript-edit').value = ''; $('review-confirm').checked = false;
   $('check-wording').disabled = true; $('transcript').replaceChildren();
-  $('findings').replaceChildren(); $('content-summary').textContent = ''; $('trace-status').textContent = '';
+  $('findings').replaceChildren(); $('content-summary').textContent = ''; $('content-summary').hidden = true; $('trace-status').textContent = '';
 }
 function serviceLimitDetail(result) {
   return 'Service limit reached; try again later.' +
@@ -31,17 +32,18 @@ function clearPreview() {
 function showError(message) { $('file-error').textContent = message; $('file-error').hidden = !message; }
 function resetResults() {
   resetReview();
+  $('auth-card').hidden = true;
   $('auth-empty').hidden = false; $('auth-loading').hidden = true; $('auth-result').hidden = true;
   $('content-card').hidden = true; $('transcript-result').hidden = true; $('transcript-error').hidden = true;
   $('auth-card').removeAttribute('data-state');
 }
 function updateControls() {
-  $('analyze-button').disabled = busy || !file || !previewReady || !mode;
+  $('analyze-button').disabled = busy || !file || !previewReady || !mode || !scansEnabled;
   $('change-file').disabled = busy; $('dropzone').disabled = busy;
   $('detection-fixture').disabled = busy; $('transcript-fixture').disabled = busy;
   $('upload-form').setAttribute('aria-busy', String(busy));
   $('button-label').textContent = busy ? (mode === 'fixture' ? 'Showing test results…' : 'Checking your file…') :
-    !mode ? 'Service unavailable' : !file ? 'Choose a file to continue' : !previewReady ? 'Preparing preview…' :
+    !mode || !scansEnabled ? 'Service unavailable' : !file ? 'Choose a file to continue' : !previewReady ? 'Preparing preview…' :
     mode === 'fixture' ? 'Show fixture results' : 'Check this file';
 }
 function chooseFiles(files) {
@@ -92,13 +94,22 @@ function authenticityResult(result, fixture) {
   $('auth-card').dataset.state = details.state;
   $('auth-label').textContent = label; $('auth-icon').textContent = details.icon;
   $('auth-source').textContent = fixture ? 'TEST FIXTURE · NOT AN ANALYSIS OF YOUR FILE' : label === 'Analysis unavailable' ? 'REALITY DEFENDER · NO VERDICT' : 'REALITY DEFENDER';
-  $('auth-guidance').textContent = details.guidance;
+  const imageMeaning = {
+    'Likely deepfake': 'Reality Defender assessed this image as likely manipulated.',
+    'Unlikely deepfake': 'Reality Defender assessed this image as unlikely to be manipulated. This does not prove it is authentic.',
+    'Unclear': 'The assessment does not establish whether this image was manipulated.',
+  };
+  // Verdict definitions only: never infer image defects from a label or score.
+  $('auth-guidance').textContent = !fixture && kind === 'image' && imageMeaning[label]
+    ? imageMeaning[label] + ' ' + details.guidance : details.guidance;
   $('auth-detail').textContent = fixture ? 'This is the selected example state. No detection scan was used.' :
     result.code === 'processing' ? 'The provider is still processing this file. No verdict is available within the polling budget.' :
     result.code === 'unsupported_status' ? 'The provider returned a status this prototype cannot interpret.' :
     result.code === 'missing_key' ? 'Detection is not configured for this prototype.' :
     result.code === 'http_429' ? serviceLimitDetail(result) :
-    label === 'Analysis unavailable' ? 'A service failure is separate from an inconclusive detection result.' : 'Review authenticity separately from what the message asks you to do.';
+    label === 'Analysis unavailable' ? 'A service failure is separate from an inconclusive detection result.' :
+    kind === 'image' ? 'The detector returned this assessment without a detailed explanation for this image.' :
+    'Review authenticity separately from what the message asks you to do.';
 }
 function markTranscript(text, findings) {
   const target = $('transcript'); target.replaceChildren();
@@ -130,14 +141,14 @@ function transcriptResult(result, content, fixture) {
   markTranscript(result.text, []);
   review = createTranscriptReview(result.text, result.language, fixture);
   $('transcript-edit').value = result.text;
-  $('transcript-status').textContent = fixture ? 'TEST TRANSCRIPT — Authored example unrelated to your recording. Review the example before demonstrating wording checks.' :
-    'UNVERIFIED TRANSCRIPTION — Listen to the original audio above. Correct only words you can hear; leave uncertain speech out. Detection is independent.';
-  $('review-confirm-label').textContent = fixture ? 'I reviewed this authored fixture example.' : 'I listened to the original and reviewed/corrected these words.';
-  renderFindings({ findings: [], message: 'Wording checks are paused until you review and confirm the transcript.' });
+  $('transcript-status').textContent = 'Listen and correct any errors before checking the wording.';
+  $('review-confirm-label').textContent = 'I reviewed this transcript.';
+  renderFindings({ findings: [], message: '' });
 }
 function renderFindings(content) {
   const findings = Array.isArray(content.findings) ? content.findings : [];
   $('content-summary').textContent = content.message;
+  $('content-summary').hidden = !content.message;
   $('findings').replaceChildren();
   for (const finding of findings) {
     const item = document.createElement('li');
@@ -157,13 +168,13 @@ function renderFindings(content) {
 $('transcript-edit').addEventListener('input', () => {
   if (!review) return;
   review.edit($('transcript-edit').value); $('review-confirm').checked = false; $('check-wording').disabled = true;
-  renderFindings({ findings: [], message: 'Text changed. Review and confirm again before running wording checks.' });
+  renderFindings({ findings: [], message: '' });
 });
 $('review-confirm').addEventListener('change', () => {
   if (!review) return;
   review.confirm($('review-confirm').checked);
   $('check-wording').disabled = !review.confirmed;
-  if (!review.confirmed) renderFindings({ findings: [], message: 'Wording checks are paused until you review and confirm the transcript.' });
+  if (!review.confirmed) renderFindings({ findings: [], message: '' });
 });
 $('check-wording').addEventListener('click', () => {
   if (!review || !review.confirmed || !activeResultId || busy) return;
@@ -185,10 +196,11 @@ $('detection-fixture').addEventListener('change', resetResults);
 $('transcript-fixture').addEventListener('change', resetResults);
 $('upload-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!file || !previewReady || busy || !mode) return;
+  if (!file || !previewReady || busy || !mode || !scansEnabled) return;
   resetReview();
   const selectedFile = file, revision = selectionRevision, requestId = crypto.randomUUID();
   busy = true; showError(''); updateControls();
+  $('auth-card').hidden = false;
   $('auth-card').removeAttribute('data-state');
   $('auth-empty').hidden = true; $('auth-result').hidden = true; $('auth-loading').hidden = false;
   $('loading-title').textContent = mode === 'fixture' ? 'Preparing a fixture…' : 'Checking authenticity…';
@@ -208,7 +220,11 @@ $('upload-form').addEventListener('submit', async event => {
     });
     const result = await response.json();
     if (revision !== selectionRevision || file !== selectedFile) return;
-    if (result.kind === 'validation') { resetResults(); showError(result.message); }
+    if (!response.ok && [429, 503].includes(response.status) && !result.authenticity) {
+      serviceFailure();
+      showError(response.status === 429 ? 'The demo usage limit has been reached. Try later.' : 'Checks are temporarily unavailable. Try later.');
+    }
+    else if (result.kind === 'validation') { resetResults(); showError(result.message); }
     else if (!response.ok || result.mode !== mode || result.fixture !== (mode === 'fixture') || !result.authenticity || !result.transcription || !result.content ||
       result.trace?.requestId !== requestId || result.trace?.uploadSha256 !== selectedSha256) {
       serviceFailure(); showError('The response could not be matched to this upload. No wording checks were run.');
@@ -229,9 +245,7 @@ $('upload-form').addEventListener('submit', async event => {
           activeResultId = requestId;
           $('transcript-result').dataset.requestId = requestId;
           $('trace-status').textContent = result.fixture ? 'Fixture example; no provider comparison applies.' :
-            'Request ' + requestId + ': selected/upload/Groq audio match; displayed text matches this Groq response. ' +
-            (result.trace.rdInputSha256 === selectedSha256 ? 'RD input file also matches. ' : 'RD input comparison unavailable. ') +
-            'Matching text does not establish that the words were spoken.';
+            'The selected file and displayed transcript match this response. Matching text does not establish that the words were spoken.';
         }
       }
       $('auth-result').focus();
@@ -248,17 +262,30 @@ try {
   if (!Number.isInteger(config.clientRequestTimeoutMs) || config.clientRequestTimeoutMs < 1000 || config.clientRequestTimeoutMs > 120000) throw new Error();
   clientRequestTimeoutMs = config.clientRequestTimeoutMs;
   mode = config.mode;
+  scansEnabled = config.scansEnabled !== false;
   $('fixture-controls').hidden = mode !== 'fixture';
   $('mode-banner').classList.toggle('live', mode === 'live');
   $('mode-banner').textContent = mode === 'fixture' ? 'FIXTURE MODE — Authored test results only. No media is sent to Reality Defender or Groq.' :
     'LIVE MODE — Reality Defender detection ' + (config.detectionConfigured ? 'is configured.' : 'is not configured.') +
     ' Groq audio transcription ' + (config.transcriptionConfigured ? 'is configured.' : 'is not configured.');
+  if (!scansEnabled) $('mode-banner').textContent = 'Live checks are not enabled.';
   $('upload-note').textContent = mode === 'fixture' ? 'Upload validation only. The result and transcript are selected examples.' :
     'Images and audio may be sent to Reality Defender; audio may also be sent to Groq.';
   $('provider-notice').textContent = mode === 'fixture' ? 'Fixture mode: RealCheck receives the file for validation, then deletes its temporary copy. Neither Reality Defender nor Groq receives any media. The selected transcript is an authored example unrelated to your recording.' :
     'Live mode: Reality Defender receives images and audio for detection when configured. Groq receives audio for Whisper transcription when configured. Images are never sent to Groq. Wording checks run in this browser only after you review and confirm the transcript; corrections are not sent to any provider.';
-} catch {
-  $('mode-banner').textContent = 'Analysis unavailable — Cannot connect to the prototype. Refresh to try again.';
+} catch (error) {
+  // Display only allowlisted diagnostics; never raw bodies, credentials or errors.
+  const steps = {
+    panel_transport: 'Panel connection: no HTTP response. Check the configured backend connection and extension site permission.',
+    panel_http: 'Panel connection: backend rejected the configuration handshake. Check the exact extension ID and restart the current backend.',
+    panel_json: 'Panel connection: backend returned invalid configuration JSON.',
+    panel_schema: 'Panel connection: backend configuration has an unsupported or missing side-panel protocol. Restart the current backend.',
+    panel_unconfigured: 'Panel connection: REALCHECK_EXTENSION_ID is not configured on the backend. Set the exact extension ID and restart it.',
+    panel_origin: 'Panel connection: backend did not authorize this extension Origin. Check the exact extension ID and restart the backend.',
+  };
+  const status = error?.code === 'panel_http' && Number.isInteger(error.status) && error.status >= 100 && error.status <= 599 ? ' HTTP ' + error.status + '.' : '';
+  $('mode-banner').textContent = Object.hasOwn(steps, error?.code) ? steps[error.code] + status :
+    'Analysis unavailable — Cannot connect to the prototype. Refresh to try again.';
   serviceFailure();
 }
 updateControls();

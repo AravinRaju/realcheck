@@ -17,7 +17,7 @@ const safeErrors = new Set(['EACCES','ECONNREFUSED','ENOTFOUND','ETIMEDOUT','ECO
   'missing_key','unauthorized','invalid_request','server_error','invalid_file','file_too_large','upload_failed','not_found','unknown_error','sdk_missing']);
 let bytes;
 try {
-  loadLocalEnv();
+  if (process.env.NODE_ENV !== 'production') loadLocalEnv();
   if (provider === 'rd') {
     const key = process.env.REALITY_DEFENDER_API_KEY?.trim();
     if (!key) throw Object.assign(new Error(), { code: 'missing_key' });
