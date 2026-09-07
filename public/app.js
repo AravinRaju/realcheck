@@ -39,7 +39,8 @@ function chooseFiles(files) {
   resetResults(); showError(''); clearPreview(); file = null; kind = null;
   $('preview').hidden = true; $('dropzone').hidden = false; $('audio-fixture-row').hidden = true;
   if (files.length !== 1) { showError('Choose one image or audio file at a time.'); updateControls(); return; }
-  const candidate = files[0], extension = candidate.name.split('.').pop().toLowerCase(), candidateKind = formats[extension];
+  const candidate = files[0], extension = candidate.name.split('.').pop().toLowerCase();
+  const candidateKind = Object.hasOwn(formats, extension) ? formats[extension] : null;
   if (!candidateKind) showError('Choose JPG, PNG, WebP, MP3, WAV, FLAC, or Ogg audio. Video is not supported.');
   else if (!candidate.size) showError('The file is empty. Choose another file.');
   else if (candidate.name.length > 180 || /[\\/\x00-\x1f]/.test(candidate.name)) showError('Use a plain filename of 180 characters or fewer.');

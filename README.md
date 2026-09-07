@@ -35,9 +35,11 @@ REALCHECK_MODE is chosen on the server. Keep it as fixture during development. S
 - Server validation of filename, extension, MIME, byte signatures/headers, and size.
 - Images limited to 10 MiB and audio to 20 MiB. PNG dimensions are bounded on the server; browser image previews are limited to 40 million pixels. Header validation is not a complete media decoder.
 - Temporary per-request files, generated filenames, and awaited cleanup on success, invalid content, interrupted upload, and provider errors.
+- Uploads must finish within 30 seconds; slow connections can still fail. The 105-second client budget includes request receipt (35 seconds), a provider-worker ceiling (60 seconds), and response/cleanup margin (10 seconds). It does not extend the upload cap.
 - Explicit fixture mode with independent detection/transcription scenario selectors.
 - Separate authenticity, transcription, and English-rule results.
 - Independent provider failures, including transcription succeeding when detection fails.
+- Fulfilled transcription output is validated before rules run; malformed text/language is independently unavailable. Allowed authenticity labels live in lib/results.mjs, separate from fixtures; this is not a verified RD SDK mapping.
 - Groq Whisper REST adapter using the documented transcription endpoint; request/response handling verified with stubbed HTTP responses only.
 - FTC-sourced phrase rules that show exact matched text, context guidance, and a source link. No scam score or scam verdict.
 - Backend environment loading, no-store responses, a restrictive Content Security Policy, same-origin browser uploads, and a strict static-file allowlist.

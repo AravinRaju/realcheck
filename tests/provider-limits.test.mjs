@@ -79,7 +79,8 @@ test('rate-limit details remain independent in both directions', async () => {
 
 test('missing, malformed, raw processing and raw failure results never become Unclear', async () => {
   // Adapter-boundary checks only, NOT verification of an unavailable SDK schema.
-  for (const value of [null, {}, { status: 'PROCESSING' }, { status: 'FAILED' }, { label: 'FAKE' }]) {
+  for (const value of [null, {}, { status: 'PROCESSING' }, { status: 'FAILED' }, { label: 'FAKE' },
+    { label: 'Unclear', status: 'FAILED' }, { label: 'Unlikely deepfake', score: 0.1 }]) {
     const result = await analyze({ metadata: { kind: 'image' } }, { mode: 'live' }, { detect: async () => value });
     assert.equal(result.authenticity.label, 'Analysis unavailable');
     assert.equal(result.authenticity.code, 'invalid_response');

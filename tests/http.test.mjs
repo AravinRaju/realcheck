@@ -8,6 +8,7 @@ import { createServer } from '../server.mjs';
 import { wav } from './helpers.mjs';
 import { budgets } from '../lib/budgets.mjs';
 import { createTranscriber } from '../lib/providers.mjs';
+import http from 'node:http';
 
 async function withServer(env, fn, dependencies = {}) {
   const root = await mkdtemp(join(tmpdir(), 'realcheck-http-test-'));
@@ -19,6 +20,23 @@ async function withServer(env, fn, dependencies = {}) {
 const post = (base, body = wav(), headers = {}) => fetch(base + '/api/analyze', {
   method: 'POST', headers: { 'Content-Type': 'audio/wav', 'X-File-Name': 'recording.wav', ...headers },
   body, signal: AbortSignal.timeout(3000),
+});
+
+test('HTTP rejects inherited formats and oversized metadata using headers alone', async () => {
+  await withServer({ REALCHECK_MODE: 'live' }, async (base, root) => {
+    for (const name of ['constructor', 'x.__proto__', 'x.png']) {
+      const status = await new Promise((resolve, reject) => {
+        const request = http.request(base + '/api/analyze', {
+          method: 'POST', headers: { 'X-File-Name': name, 'Content-Length': '999999999' },
+        }, response => { response.resume(); resolve(response.statusCode); request.destroy(); });
+        request.on('error', reject);
+        request.setTimeout(2000, () => request.destroy(new Error('Expected rejection before sending a body.')));
+        request.flushHeaders(); // No body bytes are ever sent.
+      });
+      assert.equal(status, 400);
+      assert.deepEqual(await readdir(root), []);
+    }
+  }, { detect: () => assert.fail('provider called before valid upload') });
 });
 test('HTTP serves the app and config without serving secrets or source files', async () => {
   await withServer({ REALCHECK_MODE: 'fixture', GROQ_API_KEY: 'test-only-private' }, async base => {

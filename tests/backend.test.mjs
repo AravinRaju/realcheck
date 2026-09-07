@@ -14,6 +14,7 @@ test('validation rejects empty, oversized, video, traversal and MIME spoofing', 
   for (const [name, size, type] of [
     ['x.wav', 0, ''], ['x.png', 10485761, ''], ['x.wav', 20971521, ''], ['x.mp4', 100, ''],
     ['../x.wav', 100, ''], ['x.wav', 100, 'image/png'], ['x.wav', NaN, ''],
+    ['constructor', 999999999, ''], ['x.constructor', 100, ''], ['x.__proto__', 999999999, ''],
   ]) assert.throws(() => validateMetadata(name, size, type));
   assert.equal(validateMetadata('recording.wav', wav().length, 'audio/x-wav').kind, 'audio');
 });
@@ -64,6 +65,37 @@ test('cleanup runs after interrupted stream', async () => {
     assert.deepEqual(await readdir(root), []);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('a stalled upload times out, removes its partial file, and never calls a provider', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'realcheck-timeout-test-'));
+  let called = false;
+  const stream = new Readable({ read() {} });
+  stream.push(wav().subarray(0, 20));
+  try {
+    await assert.rejects(withTemporaryUpload(stream, validateMetadata('x.wav', 3244), () => {
+      called = true;
+    }, { tempRoot: root, timeoutMs: 30 }), /Upload timed out/);
+    assert.equal(called, false);
+    assert.equal(stream.destroyed, true);
+    assert.deepEqual(await readdir(root), []);
+  } finally { stream.destroy(); await rm(root, { recursive: true, force: true }); }
+});
+
+test('invalid metadata is rejected before consuming a body or creating temporary files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'realcheck-metadata-test-'));
+  const valid = validateMetadata('x.wav', 3244);
+  let reads = 0;
+  const stream = new Readable({ read() { reads++; this.push(null); } });
+  try {
+    for (const metadata of [{ ...valid, extension: '__proto__' }, { ...valid, extension: 'constructor' },
+      { ...valid, limit: Infinity }, { ...valid, limit: 999999999 }, { ...valid, expectedSize: 999999999 }]) {
+      await assert.rejects(withTemporaryUpload(stream, metadata, () => assert.fail('provider called'), { tempRoot: root }), /Invalid upload metadata/);
+      assert.equal(reads, 0);
+      assert.deepEqual(await readdir(root), []);
+    }
+  } finally { stream.destroy(); await rm(root, { recursive: true, force: true }); }
+});
+
 test('English rules return sourced exact spans, not a verdict or score', () => {
   const text = 'Please buy gift cards. Send me the verification code. Give me remote access. Transfer the money right away.';
   const result = checkTranscript(text, 'english');
@@ -93,7 +125,7 @@ test('fixtures never invoke live providers and remain labelled', async () => {
 });
 test('detection failure preserves successful transcription and warning rules', async () => {
   const result = await analyze(audioUpload(), { mode: 'live' }, {
-    detect: async () => { throw new ProviderError('timeout'); },
+    detect: () => { throw new ProviderError('timeout'); },
     transcribe: async () => ({ text: 'Send me the verification code.', language: 'english' }),
   });
   assert.equal(result.fixture, false);
@@ -104,7 +136,7 @@ test('detection failure preserves successful transcription and warning rules', a
 test('transcription failure preserves detection and does not imply safe content', async () => {
   const result = await analyze(audioUpload(), { mode: 'live' }, {
     detect: async () => ({ label: 'Unclear' }),
-    transcribe: async () => { throw new ProviderError('http_429'); },
+    transcribe: () => { throw new ProviderError('http_429'); },
   });
   assert.equal(result.authenticity.label, 'Unclear');
   assert.equal(result.transcription.label, 'Analysis unavailable');
@@ -118,6 +150,28 @@ test('images are never sent to transcription and live never falls back to fixtur
   assert.equal(result.authenticity.label, 'Analysis unavailable');
   assert.equal(result.transcription.status, 'not_applicable');
   assert.ok(!JSON.stringify(result).includes('secret'));
+});
+
+test('malformed transcription does not erase a valid detection or run request rules', async () => {
+  for (const value of [null, [], {}, { text: 42 }, { text: 'hello', language: [] }, { text: 'x'.repeat(100001) }]) {
+    const result = await analyze(audioUpload(), { mode: 'live' }, {
+      detect: async () => ({ label: 'Unlikely deepfake' }),
+      transcribe: async () => value,
+    });
+    assert.equal(result.authenticity.label, 'Unlikely deepfake');
+    assert.equal(result.transcription.status, 'unavailable');
+    assert.equal(result.transcription.code, 'invalid_response');
+    assert.equal(result.content.status, 'not_evaluated');
+    assert.equal(result.fixture, false);
+  }
+});
+
+test('provider transcript extras cannot override application status or leak to the client', async () => {
+  const result = await analyze(audioUpload(), { mode: 'live' }, {
+    detect: async () => ({ label: 'Unclear' }),
+    transcribe: async () => ({ text: 'Hello', language: 'english', status: 'unavailable', privateMetadata: 'not for client' }),
+  });
+  assert.deepEqual(result.transcription, { status: 'complete', text: 'Hello', language: 'english' });
 });
 test('live detection gate blocks unverified SDK contract even when a key exists', async () => {
   await assert.rejects(detectManipulation({}, 'test-only'), error => error.code === 'sdk_contract_unverified');
