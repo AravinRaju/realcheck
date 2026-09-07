@@ -15,6 +15,10 @@
     "audit:sdk": "node scripts/audit-sdk.mjs",
     "check:access": "node scripts/check-access.mjs",
     "check:env": "node scripts/check-env.mjs",
+    "verify:quota": "node scripts/verify-quota.mjs verify",
+    "init:quota": "node scripts/verify-quota.mjs init",
+    "check:quota": "node scripts/verify-quota.mjs check",
+    "diagnose:quota": "node scripts/verify-quota.mjs diagnose",
     "scan:rd": "node scripts/test-provider.mjs rd",
     "transcribe:groq": "node scripts/test-provider.mjs groq"
   },

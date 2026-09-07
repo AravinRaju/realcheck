@@ -29,7 +29,7 @@ export function createServer(env = process.env, dependencies = {}) {
   if (!['fixture', 'live'].includes(mode)) throw new Error('REALCHECK_MODE must be fixture or live.');
   const extensionOrigin = configuredExtensionOrigin(env.REALCHECK_EXTENSION_ID);
   const hosting = hostingConfig(env);
-  const admit = publicUsage({ ...hosting, enabled: hosting.enabled && mode === 'live' });
+  const usage = publicUsage(hosting, dependencies.quotaOptions);
   const server = http.createServer(async (request, response) => {
     const json = (body, status = 200) => {
       response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json', ...(status >= 400 ? { Connection: 'close' } : {}) });
@@ -47,12 +47,13 @@ export function createServer(env = process.env, dependencies = {}) {
         json({ error: 'Configuration handshake must not contain a body.' }, 400); return;
       }
       const detection = detectionReadiness(env.REALITY_DEFENDER_API_KEY);
-      json({ mode, scansEnabled: mode !== 'live' || hosting.enabled, clientRequestTimeoutMs: budgets.clientMs, detectionVerified: detection.verified,
+      const scansEnabled = mode !== 'live' || (hosting.enabled && await usage.ready());
+      json({ mode, scansEnabled, clientRequestTimeoutMs: budgets.clientMs, detectionVerified: detection.verified,
         sidePanel: { protocol: 1, configured: !!extensionOrigin, authorized: access.trusted },
         transcriptionVerified: TRANSCRIPTION_LIVE_VERIFIED,
         transcriptionReviewRequired: true,
         detectionContractVerified: detection.contractInspected, detectionReady: detection.ready,
-        detectionEnabled: mode === 'live' && hosting.enabled && detection.ready,
+        detectionEnabled: mode === 'live' && scansEnabled && detection.ready,
         detectionConfigured: detection.configured, transcriptionConfigured: !!env.GROQ_API_KEY?.trim() }); return;
     }
     if (path === '/api/analyze') {
@@ -60,12 +61,13 @@ export function createServer(env = process.env, dependencies = {}) {
       // Origin checks run above, before either website or extension can upload.
       if (mode === 'live' && !hosting.enabled) { json({ error: 'Analysis unavailable', message: 'Live checks are not enabled.' }, 503); return; }
       if (active >= (hosting.origin ? 1 : 3)) { json({ error: 'Analysis unavailable', message: 'The prototype is busy. Try again shortly.' }, 503); return; }
-      if (mode === 'live') {
-        const admission = admit();
-        if (!admission.allowed) { json({ error: 'Analysis unavailable', message: admission.status === 429 ? 'The demo usage limit has been reached. Try later.' : 'Live checks are temporarily unavailable.' }, admission.status); return; }
-      }
       active++;
+      let admission;
       try {
+        if (mode === 'live') {
+          admission = await usage.admit();
+          if (!admission.allowed) { json({ error: 'Analysis unavailable', message: admission.status === 429 ? 'The demo usage limit has been reached. Try later.' : 'Live checks are temporarily unavailable.' }, admission.status); return; }
+        }
         let name;
         try { name = decodeURIComponent(request.headers['x-file-name'] || ''); }
         catch { throw new ValidationError('The filename is invalid.'); }
@@ -79,6 +81,7 @@ export function createServer(env = process.env, dependencies = {}) {
         const suppliedId = request.headers['x-request-id'];
         const requestId = typeof suppliedId === 'string' && /^[0-9a-f-]{36}$/i.test(suppliedId) ? suppliedId : randomUUID();
         const result = await withTemporaryUpload(request, metadata, async upload => {
+          if (mode === 'live' && !await usage.guard(admission.owner)) throw new Error('Scan lease unavailable.');
           upload.trace = { requestId, uploadSha256: createHash('sha256').update(upload.bytes).digest('hex') };
           const result = await analyze(upload, { mode, keys: env, detectionFixture, transcriptFixture }, dependencies);
           return { ...result, trace: upload.trace };
@@ -88,7 +91,10 @@ export function createServer(env = process.env, dependencies = {}) {
       } catch (error) {
         if (error instanceof ValidationError) json({ kind: 'validation', message: error.message }, 400);
         else json({ error: 'Analysis unavailable', message: 'The upload could not be processed. Try again.' }, 503);
-      } finally { active--; }
+      } finally {
+        if (admission?.allowed && admission.owner) await usage.release(admission.owner);
+        active--;
+      }
       return;
     }
     const asset = assets.get(path);

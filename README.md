@@ -1,4 +1,4 @@
-Hosting preparation: see [docs/hosting.md](docs/hosting.md) for current configuration, public usage limits, and extension builds. Public process/path diagnostics described in historical verification notes have been removed. Nothing is deployed.
+Hosting: the user reports the existing website deployed on Render Free at https://realchecknow.xyz. See [docs/hosting.md](docs/hosting.md) for the prepared Upstash Redis quota change, dashboard/environment steps, storage verification commands and hosted extension builds. This quota change is not deployed; public live scans remain disabled and hosted provider calls are unverified. Historical process/path diagnostics have been removed.
 
 # RealCheck
 

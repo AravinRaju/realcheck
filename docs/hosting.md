@@ -1,120 +1,295 @@
-# Hosting preparation: realchecknow.xyz
+﻿# Hosted demo: Render Free + Upstash Redis Free
 
-Prepared offline; not deployed, DNS unchanged, and no hosting/provider network
-checks performed. User-run local website verification is not hosting verification
-or an accuracy benchmark. Existing transcript review, original playback, hidden
-scores, and independent detection/transcription failure states are preserved.
+Repository: AravinRaju/realcheck, branch realcheck-consolidated. Starting local HEAD
+was 70fa7c9f959da1e9cc485f17fbedab6e2fc9bf68 and Git was clean. The user reports
+that commit deployed at https://realcheck-nx9y.onrender.com, with the custom domain
+https://realchecknow.xyz working. Do not change DNS or TLS. This quota change has
+not been pushed or deployed. Hosted provider calls remain unverified.
 
-## Runtime requirements
+The user has now run init:quota successfully against real Upstash Redis and
+check:quota confirmed the production ledger is reachable and valid. This covers
+the real Redis verification suite from the user's terminal; Render runtime
+connectivity and hosted provider calls remain pending. Do not initialize again
+as part of deployment.
 
-- A long-running Node.js 22.13+ process supporting child processes and writable
-  temporary files. Install the lockfile with `npm ci --omit=dev`; start `npm start`.
-  Static-only hosting and short-lived edge/serverless functions are unsuitable.
-- Exactly ONE process/replica, no cluster workers or overlapping rolling replicas.
-  The admission ledger uses one persistent volume. Multi-instance operation needs
-  an atomic shared quota store before live scans can be enabled.
-- TLS termination for https://realchecknow.xyz and a private upstream to the
-  supplied PORT. HOST defaults to 0.0.0.0 with a public origin; set HOST if needed.
-  The proxy must preserve Origin and the custom upload headers, allow POST and
-  OPTIONS, support 20 MiB request bodies, and allow at least 110 seconds for the
-  full response. Application upload receipt is capped at 30 seconds, provider
-  processing is bounded, and uploaded temporary files are removed.
-- Restrict direct upstream access. Redirect HTTP to canonical HTTPS at the proxy.
-  Configure proxy connection/rate limits for static/config traffic too. Do not
-  log request/response bodies, filenames, transcripts, or provider credentials.
-- Authorized outbound HTTPS for api.prd.realitydefender.xyz, its SDK-issued
-  upload destinations, and api.groq.com. Actual hosting egress is not verified.
+The last user-reported hosted config has mode=live, scansEnabled=false,
+detectionReady=true, detectionEnabled=false, detectionConfigured=true,
+transcriptionConfigured=true, transcriptionReviewRequired=true.
 
-## Server environment (host settings, not browser/build settings)
+## Storage decision (official documentation checked 2026-09-07)
+
+Use **Upstash Redis Free**, via Node's built-in fetch and the Redis REST API.
+No application dependency is added. [Render Free](https://render.com/docs/free)
+has ephemeral files, cannot attach persistent disks, and its free Key Value
+service also loses data on restart.
+
+Upstash's [current pricing](https://upstash.com/pricing/redis) lists one Free
+database, 256 MB data, 500,000 commands/month and 10 GB/month bandwidth. Normal
+demo usage is small, but rejected requests and internal Lua commands also consume
+service budget. Exhaustion must block scans, not trigger a paid upgrade. The older
+FAQ still mentions 10,000 requests/day; confirm the current pricing in your console.
+
+[Persistence](https://upstash.com/docs/redis/features/durability) is always enabled:
+writes go to memory and cloud block storage. Free lacks paid replica redundancy.
+The [FAQ](https://upstash.com/docs/redis/help/faq) says free databases are archived
+after at least 30 idle days, with warning emails and backed-up data that can be
+restored. This is persistent demo storage, not an uptime SLA. Unavailable storage
+blocks scans. Restore existing data; never silently reset a missing budget.
+
+Keep [eviction](https://upstash.com/docs/redis/features/eviction) disabled (default).
+Do not delete, expire, flush, rename or manually edit `realcheck:quota:v1`.
+Every process and both clients must use the same database and key.
+
+## Quota behavior
+
+- One [atomic Lua EVAL](https://upstash.com/blog/lua-scripting-on-upstash-redis-atomic-operations-over-http)
+  checks quota and grants the lease. One JSON key and one final SET avoid partial
+  lock/quota commits. [Upstash script locking](https://upstash.com/docs/redis/features/key-locking)
+  serializes concurrent callers. No separate GET/SET admission or local fallback.
+- Global ceilings: **5 admitted attempts per rolling hour, 20 per rolling 24 hours**.
+  Environment settings may lower these limits, never raise them. Redis TIME avoids
+  per-process clock skew. State holds only bounded timestamps and lease metadata.
+- One active scan receives a **120-second lease**. Busy, over-quota and unauthorized
+  requests do not consume attempts. Admitted invalid uploads, provider failures,
+  disconnects and crashes do. No refunds and no automatic retries.
+- After upload validation, a second EVAL requires the same owner and at least
+  75 seconds remaining before providers start. Upload receipt is capped at
+  30 seconds, the SDK worker at 60 seconds and Groq at 50 seconds. The SDK worker
+  also exits on parent disconnect and has its own watchdog. A crashed lease
+  recovers after at most two minutes; its attempt remains counted. This gates
+  application work, not cancellation of requests already received by providers.
+- Release follows awaited cleanup and matches the owner, so stale requests cannot
+  release a replacement lease. Failed release leaves the lease until its deadline.
+  REST calls have five-second timeouts, no redirects and no retries. An ambiguous
+  admission reply blocks provider dispatch even if the attempt committed.
+- Missing, malformed, expiring, clock-inconsistent or unavailable state fails closed.
+  The server never initializes storage on startup/admission. Old usage.json and
+  REALCHECK_STATE_DIR are no longer used; they are not migrated or deleted.
+- The existing /api/config schema stays unchanged. Enabled hosted live mode checks
+  storage readiness; failed readiness makes scansEnabled/detectionEnabled false.
+  With the public switch false, config stays disabled without contacting Redis.
+  Admission independently checks storage on every request.
+
+No media, filenames, transcripts, IPs or secrets enter the ledger. Temporary uploads
+still use temporary disk and awaited cleanup. Exact-origin authorization, separate
+provider results and mandatory transcript review remain intact.
+
+## 1. Create the free database in your dashboard
+
+No resources were created by this code change. These are user-run setup steps.
+
+1. Sign in to [Upstash Console](https://console.upstash.com), select **Redis**, click
+   **Create Database**, and name it `realcheck-quota`.
+2. Select the **Primary Region** nearest your existing Render service's region.
+   Add no read regions. Click **Next**, select **Free ($0)** and create it. If Free
+   is unavailable, stop; do not select paid resources or add a card for an upgrade.
+   Do not use the temporary anonymous database API.
+3. In **Details / Connect**, choose **REST / HTTPS**. Privately copy
+   UPSTASH_REDIS_REST_URL and the full read/write UPSTASH_REDIS_REST_TOKEN.
+   Use neither the Readonly Token nor the redis:// TCP URL. The REST URL must be
+   an exact `https://<database>.upstash.io` origin.
+4. Confirm Free and eviction disabled. Keep auto-upgrade disabled if shown.
+
+Official [creation steps](https://upstash.com/docs/redis/overall/getstarted) and
+[REST connection fields](https://upstash.com/docs/redis/features/restapi).
+
+## 2. Verify and initialize from your PowerShell
+
+Use a fresh terminal. Local quota commands now load the repository .env (even
+from another working directory); existing process variables take precedence.
+Production never loads .env. These commands do not edit .env, contact providers,
+push or deploy. If real credentials are already saved privately in .env, run
+`node scripts/verify-quota.mjs configuration` for a network-free configured/missing
+report, then `npm.cmd run check:quota` for a read-only ledger check. A placeholder
+token is reported as missing. To supply credentials temporarily instead, use:
+
+```powershell
+Set-Location C:\Users\aravi\realcheck
+$env:REALCHECK_PUBLIC_LIVE_ENABLED = 'false'
+$env:UPSTASH_REDIS_REST_URL = Read-Host 'Upstash REST HTTPS URL'
+$quotaSecret = Read-Host 'Upstash read/write REST token' -AsSecureString
+$env:UPSTASH_REDIS_REST_TOKEN = [System.Net.NetworkCredential]::new('', $quotaSecret).Password
+npm.cmd run init:quota
+if ($LASTEXITCODE -ne 0) { throw 'Quota setup failed; keep scans disabled.' }
+npm.cmd run check:quota
+if ($LASTEXITCODE -ne 0) { throw 'Quota check failed; keep scans disabled.' }
+```
+
+init:quota first runs the actual Lua on a random verification key: eight concurrent
+clients, hourly/daily windows, new-client continuity, crash recovery, stale release,
+guard expiry, corruption, missing state, unexpected TTL and clock rollback. It
+cleans only its test key. Forced termination may leave a small
+`realcheck:verify:<uuid>` key; remove only that key when no verifier is using it.
+
+Only after the real tests pass does it **SET NX** the production ledger; rerunning
+preserves existing attempts and leases. check:quota checks production state without
+admitting an attempt. verify:quota repeats the isolated suite without initializing
+production. These commands import no providers. Never use init to recover lost
+production usage: restore data, or keep scans disabled for at least 24 hours after
+the last possible admission before explicitly initializing a replacement.
+
+Close this terminal afterward or clear its temporary credentials:
+
+```powershell
+Remove-Item Env:UPSTASH_REDIS_REST_TOKEN, Env:UPSTASH_REDIS_REST_URL, Env:REALCHECK_PUBLIC_LIVE_ENABLED -ErrorAction SilentlyContinue
+Remove-Variable quotaSecret -ErrorAction SilentlyContinue
+```
+
+The agent shell's probe to https://registry.npmjs.org/fengari failed with
+`fetch failed / EACCES`; separate documentation browsing worked. No package was
+installed. After the configuration and Lua fixes, the user ran init:quota and
+check:quota successfully from normal PowerShell. The agent has not independently
+run that external verification. Offline stub tests alone do not establish live
+storage correctness.
+
+Quota CLI failures report only a sanitized stage: configuration, network (with
+allowlisted error code), request error (HTTP number and fixed category), Lua
+execution (compile/runtime), missing ledger, or ledger validation.
+No token, header, raw response, assertion payload or endpoint is
+printed. A missing production ledger fails validation; check:quota never resets
+or initializes it. Keep public scans disabled while diagnosing failures.
+
+### Read-only HTTP 400 diagnosis
+
+The quota script used `s.until`, which is invalid Lua because `until` is a reserved
+keyword. It now uses `s["until"]`, preserving the existing JSON field/data format.
+See [Lua lexical conventions](https://www.lua.org/manual/5.1/manual.html#2.1).
+The previous HTTP handler also discarded error envelopes before classification;
+it now reads them privately and maps recognized errors to fixed labels only.
+
+The request matches [Upstash's REST contract](https://upstash.com/docs/redis/features/restapi):
+POST to the HTTPS origin root, application/json, one JSON array in the body,
+and bearer authorization in the header. No command or token is added to the URL.
+Runtime checks use `["EVAL", script, "1", "realcheck:quota:v1", "check"]`:
+numkeys is 1, KEYS[1] is the ledger key, ARGV[1] is check. The original check
+branch returned before SET, but compilation parses the entire script first.
+The CLI check now uses EVAL_RO with the same arguments so Redis enforces no writes.
+Runtime admission/guard/release remain EVAL for atomic leader-side coordination.
+EVAL_RO checks are point-in-time reads, not proof of write permission or a
+replacement for the separately authorized real admission test suite.
+
+In normal PowerShell, with the existing private .env:
+
+```powershell
+Set-Location C:\Users\aravi\realcheck
+$env:REALCHECK_PUBLIC_LIVE_ENABLED = 'false'
+npm.cmd run diagnose:quota
+```
+
+This performs at most four requests, stopping on the first failure: PING,
+EVAL_RO key/argument echo, EVAL_RO full quota-script compilation with an early
+return before ledger access, then EVAL_RO existing-ledger validation. Only fixed
+pass/failure messages are printed. No SET, DEL, initialization or provider call
+is performed. An absent ledger returns a distinct internal result mapped to
+`missing ledger`; the CLI does not suggest or perform an automatic reset.
+HTTP 400 alone cannot distinguish syntax, unsupported command or execution
+failure; unknown upstream errors are labelled unclassified request rejections.
+
+## 3. Prepare Render variables without deploying
+
+Open the existing realcheck service in [Render Dashboard](https://dashboard.render.com),
+choose **Environment**, then **Edit / Add Environment Variable**. Set the following
+and choose the dropdown **Save only**. Do not choose either deploy option.
+[Save only does not deploy](https://render.com/docs/configure-environment-variables).
 
 ```text
 NODE_ENV=production
 REALCHECK_PUBLIC_ORIGIN=https://realchecknow.xyz
 HOST=0.0.0.0
-PORT=<provided by host>
 REALCHECK_MODE=live
 REALCHECK_PUBLIC_LIVE_ENABLED=false
-REALCHECK_STATE_DIR=/persistent/realcheck
 REALCHECK_DAILY_LIMIT=20
 REALCHECK_HOURLY_LIMIT=5
 REALCHECK_EXTENSION_ID=lbfnfcfbfiedpcihlklplieolhffpiol
+UPSTASH_REDIS_REST_URL=<your exact HTTPS REST origin>
+UPSTASH_REDIS_REST_TOKEN=<your private read/write REST token>
 ```
 
-Set REALITY_DEFENDER_API_KEY and GROQ_API_KEY privately in the host's secret
-manager/environment. Do not put them in build arguments, the extension, source,
-or public assets. Production entrypoint does not load .env. Never upload .env,
-recordings, verification archives, .git, or node_modules as source.
+Keep REALITY_DEFENDER_API_KEY and GROQ_API_KEY privately in the server environment;
+do not expose or unnecessarily re-enter them. Leave PORT supplied by Render.
+Remove obsolete REALCHECK_STATE_DIR from saved settings; no persistent disk is
+needed. Keep the service Free. Leave DNS/custom-domain/TLS settings alone.
+Save only does not change the running service until a later authorized deploy.
 
-Hosted live checks are disabled unless REALCHECK_PUBLIC_LIVE_ENABLED is exactly
-true. Set it only after HTTPS/config/extension checks and volume setup are done.
-When enabled, the defaults admit at most 5 uploads per rolling hour and 20 per
-rolling 24 hours, with one active upload/check. Each audio attempt may call both
-providers. Rejected/failed admitted attempts consume quota; there is no retry.
-Configured ceilings cannot exceed 20/hour or 100/day. Quota state contains only
-bounded timestamp entries, survives process restarts, and fails closed on corrupt
-or unwritable storage. Preserve usage.json when restarting or moving the app;
-do not replace the persistent volume. This is a global demo budget, not a
-per-user entitlement or bot defense: another visitor can exhaust it. Proxy abuse
-controls and provider-side spending limits remain hosting responsibilities.
+Keep Node 22.13+ and one service instance. For the first hosted release use the
+read-only verification start command below. Local `npm start` is unchanged. Shared quota
+also coordinates overlapping new-code processes. Never overlap enabled old disk
+ledger code with enabled new code. Do not upload .env, media or private archives.
 
-Origin checks use the explicit HTTPS origin, not Host or forwarded headers.
-Only the one configured extension origin receives CORS access. No wildcard,
-credentialed CORS, arbitrary URL proxy, or client-claimed extension ID is added.
-Origins are browser isolation controls, not proof of a human user.
-
-/api/config exposes readiness booleans and the panel protocol only; no process
-ID, project path, Git state, detailed SDK object, or request-header diagnostics.
-Upload response hashes/request IDs remain for client integrity checks, are not
-logged, and are no longer displayed. No general diagnostic endpoint is served.
-
-## Extension build and reload
-
-From the project root in PowerShell:
+## 4. Hosted extension build (no upload or deployment)
 
 ```powershell
+Set-Location C:\Users\aravi\realcheck
 $env:REALCHECK_EXTENSION_BACKEND = 'https://realchecknow.xyz'
 npm.cmd run build:extension
+Remove-Item Env:REALCHECK_EXTENSION_BACKEND
 ```
 
-The build generates manifest.json from manifest.template.json and binds the
-client, host permission, CSP, and connection notice to this origin. Only this
-host is permitted in the hosted build; localhost is not additionally permitted.
-No new permission other than the existing sidePanel permission is used.
-Reload RealCheck at chrome://extensions, then close/reopen the panel. Keep the
-same unpacked folder to retain its ID and confirm the actual ID matches the host.
-Distribution/store packaging may produce a different ID: update the server to
-that exact ID before testing it. Configuration uses the existing body-free POST
-handshake so Chrome supplies Origin. Opening the panel does not upload media.
+At chrome://extensions, reload the existing unpacked extension at
+`C:\Users\aravi\realcheck\extension`, then close/reopen the panel. Keep the same
+folder to preserve its ID and verify **lbfnfcfbfiedpcihlklplieolhffpiol**. Allow the
+selected site's access if Chrome asks. Only the selected hosted backend is included
+in the generated manifest, CSP and client. Provider keys are never build inputs.
+Opening the panel sends only a body-free config POST, not media. Keep scans disabled.
+A terminal GET config cannot verify Chrome's actual extension authorization.
 
-Return to local development:
+Return the same extension to the existing local backend:
 
 ```powershell
 $env:REALCHECK_EXTENSION_BACKEND = 'http://127.0.0.1:3001'
 npm.cmd run build:extension
+Remove-Item Env:REALCHECK_EXTENSION_BACKEND
 ```
 
-In a fresh local shell with no hosting variables, existing ignored .env continues
-to work. Use PORT=3001 for the local panel. Without REALCHECK_PUBLIC_ORIGIN, the
-server stays loopback-only and existing local checks are unaffected.
+Reload Chrome. In a fresh shell, existing ignored .env and `npm start` remain
+available; no Redis is required without a public origin. Do not start a second
+server on an occupied port. Preparation left generated extension assets on localhost.
 
-## Release sequence remaining (not performed)
+## Deployment and hosted verification (no push or deploy performed here)
 
-1. Choose a compatible host, one instance and persistent volume. Add server
-   secrets and environment above, keeping public live checks disabled.
-2. With explicit deployment authorization, release the tested source and set up
-   domain/TLS/proxy. DNS and deployment have not been changed here.
-3. Check HTTPS website configuration and the rebuilt extension handshake without
-   media. Confirm scansEnabled=false; no local paths/diagnostics in config.
-4. Configure edge abuse controls and provider spending limits. Enable public live
-   checks deliberately. Restart using the same quota volume.
-5. Ask for approval for a bounded live upload, then verify file playback, detection,
-   transcript review/correction, independent failures, and quota behavior. Record
-   this as hosting end-to-end verification, never an accuracy benchmark.
-6. Disable REALCHECK_PUBLIC_LIVE_ENABLED to suspend scans without falling back
-   to fixtures. Hard refresh clients after a configuration restart.
+1. Obtain push/deployment authorization. Keep public scans false for the first
+   release of this code and retain the same Upstash database/key.
+2. In the existing Render service's Settings, use Build Command
+   `npm ci --omit=dev` and Start Command
+   `npm run diagnose:quota && npm start`. Keep NODE_ENV=production,
+   REALCHECK_MODE=live and REALCHECK_PUBLIC_LIVE_ENABLED=false in Environment,
+   with the existing private Upstash variables. Do this only for the authorized
+   release; no dashboard setting has been changed here. The start command runs
+   in the deployed service runtime, not the build environment. A failed check
+   prevents that new instance starting; it never enables scans or resets data.
+   [Render start command](https://render.com/docs/deploys#start-command).
+   [Render Free has no dashboard shell](https://render.com/docs/ssh).
+   The diagnostic executes PING and EVAL_RO only, without admitting any scan.
+   Do not use init:quota or verify:quota in the deploy command.
+   In the deploy/runtime logs for this commit, require these messages followed
+   by the normal server-listening message:
 
-Offline tests cover local defaults, canonical HTTPS and exact extension origin,
-forged/missing origins, disabled public scans, concurrency, persisted hourly/daily
-quota, fail-closed storage, reduced config schema, both extension targets, existing
-review gating and byte tracing. Host runtime/TLS and actual Chrome hosted behavior
-still require manual verification after an authorized deployment.
+   ```text
+   REST connection: passed.
+   Read-only Lua and EVAL argument mapping: passed.
+   Quota script compilation: passed.
+   Existing ledger validation: passed. No writes or attempts admitted.
+   RealCheck server listening on configured address and port.
+   ```
+
+3. Check HTTPS configuration and the rebuilt Chrome panel handshake without media.
+   Expect scansEnabled=false and transcriptionReviewRequired=true. PowerShell:
+   `Invoke-RestMethod https://realchecknow.xyz/api/config`.
+   Confirm Render's deployed commit matches the prepared commit. Disabled config
+   alone is not evidence of Redis connectivity: it intentionally skips Redis.
+4. Only after local and Render storage verification passes, authorize enabling
+   REALCHECK_PUBLIC_LIVE_ENABLED=true and the resulting deployment. Confirm config
+   scansEnabled=true. This is not evidence of hosted provider success.
+5. Separately authorize bounded hosted image/audio tests. Verify original playback,
+   independent results, review/correction before wording checks and quota continuity
+   across restart. All admitted checks count, including failures.
+6. Disable the public switch to suspend scans, retain the ledger and reload clients.
+
+## Local verification
+
+`npm test` uses stub storage responses/providers and synthetic media: REST contract
+and failures, HTTP admission/lease/release/cleanup, origins, transcript review and
+independent results. `npm run check` checks syntax and wiring; existing tests build
+both extension targets. The separate real Redis suite is required to establish
+Lua execution/atomicity on Upstash. Offline success proves neither that nor hosted
+provider success.

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { hostingConfig, publicUsage } from '../lib/hosting.mjs';
+import { hostingConfig } from '../lib/hosting.mjs';
 import { extensionApiAccess } from '../extension/server-access.mjs';
 import { buildPanel } from '../extension/build.mjs';
 import { createPanelFetch } from '../extension/client.mjs';
@@ -28,25 +28,6 @@ test('HTTPS website and exact extension origins pass; missing, forged and foreig
   assert.equal(preflight.headers['Access-Control-Allow-Origin'], extension);
 });
 
-test('global hourly/daily admission budget survives restart and fails closed on ledger errors', () => {
-  const root = mkdtempSync(join(tmpdir(), 'realcheck-budget-'));
-  try {
-    let time = 100000000;
-    const config = { origin, enabled: true, stateDir: root, daily: 3, hourly: 2 };
-    let admit = publicUsage(config, { now: () => time });
-    assert.equal(admit().allowed, true); assert.equal(admit().allowed, true);
-    assert.equal(admit().status, 429);
-    admit = publicUsage(config, { now: () => time }); assert.equal(admit().status, 429);
-    time += 3600001; assert.equal(admit().allowed, true); assert.equal(admit().status, 429);
-    time += 86400001; assert.equal(admit().allowed, true);
-    writeFileSync(join(root, 'usage.json'), 'bad'); assert.throws(() => publicUsage(config));
-    assert.throws(() => publicUsage({ ...config, stateDir: 'relative' }));
-    writeFileSync(join(root, 'usage.json'), '[]');
-    admit = publicUsage(config); rmSync(root, { recursive: true });
-    assert.equal(admit().status, 503); assert.equal(admit().status, 503);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
 test('hosted scans default off, do not call providers, and config contains no process diagnostics', async () => {
   let calls = 0;
   const server = createServer({ REALCHECK_MODE: 'live', REALCHECK_PUBLIC_ORIGIN: origin }, { detect: () => { calls++; } });
@@ -63,10 +44,16 @@ test('hosted scans default off, do not call providers, and config contains no pr
 });
 
 test('hosted admission enforces one active scan and quota before provider calls', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'realcheck-host-test-'));
+  let admitted = false;
   let calls = 0, release, started;
   const pending = new Promise(resolve => { started = resolve; });
-  const server = createServer({ REALCHECK_MODE: 'live', REALCHECK_PUBLIC_ORIGIN: origin, REALCHECK_PUBLIC_LIVE_ENABLED: 'true', REALCHECK_STATE_DIR: root, REALCHECK_DAILY_LIMIT: '1', REALCHECK_HOURLY_LIMIT: '1' }, {
+  const server = createServer({ REALCHECK_MODE: 'live', REALCHECK_PUBLIC_ORIGIN: origin, REALCHECK_PUBLIC_LIVE_ENABLED: 'true', UPSTASH_REDIS_REST_URL: 'https://test.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'test', REALCHECK_DAILY_LIMIT: '1', REALCHECK_HOURLY_LIMIT: '1' }, {
+    quotaOptions: { fetcher: async (_url, init) => {
+      const op = JSON.parse(init.body)[4];
+      if (op !== 'admit') return Response.json({ result: 200 });
+      const status = admitted ? 429 : 200; admitted = true;
+      return Response.json({ result: status });
+    } },
     detect: async () => { calls++; started(); await new Promise(resolve => { release = resolve; }); return { label: 'Unlikely deepfake' }; },
     transcribe: async () => ({ text: 'Synthetic test.', language: 'english' }),
   });
@@ -77,7 +64,7 @@ test('hosted admission enforces one active scan and quota before provider calls'
     const first = upload(); await pending;
     assert.equal((await upload()).status, 503); release(); assert.equal((await first).status, 200);
     assert.equal((await upload()).status, 429); assert.equal(calls, 1);
-  } finally { release?.(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+  } finally { release?.(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
 test('extension builds and requests use only their selected allowed backend', async () => {

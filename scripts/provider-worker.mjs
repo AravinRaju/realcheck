@@ -7,6 +7,10 @@ import { mapRealityDefenderResult } from '../lib/rd-result.mjs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { budgets } from '../lib/budgets.mjs';
+// Parent death must not leave SDK polling alive beyond the shared scan lease.
+process.on('disconnect', () => process.exit(1));
+setTimeout(() => process.exit(1), budgets.workerMs).unref();
 const [provider, path] = process.argv.slice(2);
 const diagnostic = {};
 const respond = message => new Promise(resolve => {
