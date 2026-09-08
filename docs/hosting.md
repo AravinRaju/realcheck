@@ -289,6 +289,26 @@ server on an occupied port. Preparation left generated extension assets on local
 
 ### Provider failure diagnostics
 
+The user subsequently reported RD unsupported_status and Groq http_401, with
+Redis verification passing. The RD worker already carried providerStatus, but
+the parent adapter discarded it. Unsupported statuses now retain only an exact
+1-40 character uppercase/underscore token in the API response, structured RD
+failure log and authenticity panel. Unsafe or overlong values are omitted, never
+truncated. No additional verdict mapping is introduced; unsupported stays
+unavailable. A future authorized hosted request is needed to observe the actual
+SDK status; synthetic test statuses are not evidence of the hosted status.
+
+The UI previously manufactured an unavailable result without a code after
+transport errors, timeouts, invalid JSON or integrity/response-matching failures,
+then displayed its fallback code internal. It also used internal for unknown
+or missing provider codes. Those paths now use explicit client_timeout,
+client_request_failed, response_invalid, request_rejected, response_mismatch,
+integrity_mismatch, missing_failure_code or unknown_failure_code. A trusted
+http_401 remains http_401, and an explicit server internal stays internal.
+Offline tests reproduce simultaneous provider failures and the fallback paths;
+the available hosted logs do not identify which client fallback was taken.
+Reload the website and rebuild/reload the hosted extension to use the new UI.
+
 The user reports hosted detection succeeded but Groq transcription failed. The
 cause is not yet established. Groq failures already returned a sanitized code in
 the transcription result; the UI now displays that code (for example http_400,

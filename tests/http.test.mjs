@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { createServer } from '../server.mjs';
 import { wav } from './helpers.mjs';
 import { budgets } from '../lib/budgets.mjs';
-import { createTranscriber } from '../lib/providers.mjs';
+import { createTranscriber, detectManipulation } from '../lib/providers.mjs';
 import http from 'node:http';
 
 async function withServer(env, fn, dependencies = {}) {
@@ -38,6 +38,26 @@ test('HTTP preserves successful detection and exposes only the sanitized Groq co
   }, {
     detect: async () => ({ label: 'Unlikely deepfake' }),
     transcribe: (upload, key) => createTranscriber()(upload, key, { fetcher: async () => new Response('private raw', { status: 400 }) }),
+    providerLogger: line => logs.push(line),
+  });
+});
+
+test('HTTP preserves unsupported RD status and Groq 401 together in the response and logs', async () => {
+  const logs = [];
+  await withServer({ REALCHECK_MODE: 'live', REALITY_DEFENDER_API_KEY: 'synthetic', GROQ_API_KEY: 'synthetic' }, async base => {
+    const response = await post(base); assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.authenticity.code, 'unsupported_status');
+    assert.equal(result.authenticity.providerStatus, 'NOT_APPLICABLE');
+    assert.equal(result.authenticity.label, 'Analysis unavailable');
+    assert.equal(result.transcription.code, 'http_401');
+    const records = logs.map(line => JSON.parse(line));
+    assert.equal(records.find(r => r.provider === 'reality_defender').providerStatus, 'NOT_APPLICABLE');
+    assert.equal(records.find(r => r.provider === 'groq').httpStatus, 401);
+    assert.equal(result.content.status, 'not_evaluated');
+  }, {
+    detect: (upload, key) => detectManipulation(upload, key, { worker: async () => ({ outcome: 'response_received', error: 'unsupported_status', providerStatus: 'NOT_APPLICABLE' }) }),
+    transcribe: (upload, key) => createTranscriber()(upload, key, { fetcher: async () => new Response('', { status: 401 }) }),
     providerLogger: line => logs.push(line),
   });
 });

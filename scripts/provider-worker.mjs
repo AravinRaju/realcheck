@@ -3,7 +3,7 @@ import { extname } from 'node:path';
 import { loadLocalEnv } from '../lib/config.mjs';
 import { transcribeAudio } from '../lib/providers.mjs';
 import { formats } from '../lib/media.mjs';
-import { mapRealityDefenderResult } from '../lib/rd-result.mjs';
+import { mapRealityDefenderResult, sanitizedRealityDefenderStatus } from '../lib/rd-result.mjs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -42,7 +42,7 @@ try {
     // Documented API; one detect invocation (one upload). Normal result polling
     // is bounded. There is no application-level retry after an error.
     const result = await client.detect({ filePath: path }, { maxAttempts: 10, pollingInterval: 2000 });
-    const status = typeof result?.status === 'string' && /^[A-Z_]{1,40}$/.test(result.status) ? result.status : null;
+    const status = sanitizedRealityDefenderStatus(result?.status);
     if (!status) throw Object.assign(new Error(), { code: 'invalid_response' });
     const fields = Object.fromEntries(Object.entries(result).filter(([name]) => /^[a-zA-Z][a-zA-Z0-9_]{0,60}$/.test(name))
       .map(([name, value]) => [name, value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value]));

@@ -23,8 +23,12 @@ function serviceLimitDetail(result) {
     (Number.isSafeInteger(result.retryAfterSeconds) && result.retryAfterSeconds > 0
       ? ' Wait at least ' + result.retryAfterSeconds + ' seconds before trying this provider again.' : '');
 }
-function transcriptionFailureCode(code) {
-  return typeof code === 'string' && (['missing_key', 'timeout', 'network', 'invalid_response', 'internal', 'provider_error'].includes(code) || /^http_[45]\d{2}$/.test(code)) ? code : 'internal';
+function displayFailureCode(code) {
+  if (code == null) return 'missing_failure_code';
+  return typeof code === 'string' && (['missing_key', 'timeout', 'network', 'invalid_response', 'internal', 'provider_error',
+    'sdk_missing', 'processing', 'unsupported_status', 'unauthorized', 'invalid_request', 'server_error',
+    'invalid_file', 'file_too_large', 'upload_failed', 'not_found', 'unknown_error', 'worker_start_failed', 'worker_failed',
+    'client_request_failed', 'client_timeout', 'response_invalid', 'request_rejected', 'response_mismatch', 'integrity_mismatch'].includes(code) || /^http_[45]\d{2}$/.test(code)) ? code : 'unknown_failure_code';
 }
 function clearPreview() {
   for (const audio of $('media-preview').querySelectorAll('audio')) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
@@ -113,6 +117,12 @@ function authenticityResult(result, fixture) {
     label === 'Analysis unavailable' ? 'A service failure is separate from an inconclusive detection result.' :
     kind === 'image' ? 'The detector returned this assessment without a detailed explanation for this image.' :
     'Review authenticity separately from what the message asks you to do.';
+  if (!fixture && label === 'Analysis unavailable') {
+    $('auth-detail').textContent += ' Failure code: ' + displayFailureCode(result.code) + '.';
+    if (result.code === 'unsupported_status' && typeof result.providerStatus === 'string' && /^[A-Z_]{1,40}$/.test(result.providerStatus)) {
+      $('auth-detail').textContent += ' SDK status: ' + result.providerStatus + '. No verdict mapping is defined for this status.';
+    }
+  }
 }
 function markTranscript(text, findings) {
   const target = $('transcript'); target.replaceChildren();
@@ -136,7 +146,7 @@ function transcriptResult(result, content, fixture) {
     $('transcript-error-detail').textContent = fixture ? 'TEST FIXTURE — Simulated transcription failure. No audio was sent to Groq.' :
       result.code === 'missing_key' ? 'Transcription is not configured for this prototype.' :
       result.code === 'http_429' ? serviceLimitDetail(result) : 'Groq transcription did not complete. Try again later.';
-    if (!fixture) $('transcript-error-detail').textContent += ' Failure code: ' + transcriptionFailureCode(result.code) + '.';
+    if (!fixture) $('transcript-error-detail').textContent += ' Failure code: ' + displayFailureCode(result.code) + '.';
     return;
   }
   $('transcript-result').hidden = false;
@@ -185,9 +195,9 @@ $('check-wording').addEventListener('click', () => {
   // Rules run locally on the user's draft, never re-upload or alter detection.
   renderFindings(review.check());
 });
-function serviceFailure() {
-  authenticityResult({ status: 'unavailable' }, false);
-  transcriptResult({ status: 'unavailable' }, {}, false);
+function serviceFailure(code = 'client_request_failed') {
+  authenticityResult({ status: 'unavailable', code }, false);
+  transcriptResult({ status: 'unavailable', code }, {}, false);
 }
 for (const id of ['dropzone', 'change-file']) $(id).addEventListener('click', () => { $('file-input').value = ''; $('file-input').click(); });
 $('file-input').addEventListener('change', event => { if (event.target.files.length) chooseFiles(event.target.files); });
@@ -225,23 +235,23 @@ $('upload-form').addEventListener('submit', async event => {
     const result = await response.json();
     if (revision !== selectionRevision || file !== selectedFile) return;
     if (!response.ok && [429, 503].includes(response.status) && !result.authenticity) {
-      serviceFailure();
+      serviceFailure('request_rejected');
       showError(response.status === 429 ? 'The demo usage limit has been reached. Try later.' : 'Checks are temporarily unavailable. Try later.');
     }
     else if (result.kind === 'validation') { resetResults(); showError(result.message); }
     else if (!response.ok || result.mode !== mode || result.fixture !== (mode === 'fixture') || !result.authenticity || !result.transcription || !result.content ||
       result.trace?.requestId !== requestId || result.trace?.uploadSha256 !== selectedSha256) {
-      serviceFailure(); showError('The response could not be matched to this upload. No wording checks were run.');
+      serviceFailure('response_mismatch'); showError('The response could not be matched to this upload. No wording checks were run.');
     }
     else {
       authenticityResult(result.authenticity, result.fixture);
-      if (!result.fixture && result.trace.rdInputSha256 && result.trace.rdInputSha256 !== selectedSha256) authenticityResult({ status: 'unavailable' }, false);
+      if (!result.fixture && result.trace.rdInputSha256 && result.trace.rdInputSha256 !== selectedSha256) authenticityResult({ status: 'unavailable', code: 'integrity_mismatch' }, false);
       let transcriptMatches = true;
       if (!result.fixture && result.transcription.status === 'complete') {
         transcriptMatches = result.trace.groqInputSha256 === selectedSha256 && typeof result.transcription.text === 'string' &&
           result.trace.groqTextSha256 === await sha256(new TextEncoder().encode(result.transcription.text));
       }
-      transcriptResult(transcriptMatches ? result.transcription : { status: 'unavailable' }, result.content, result.fixture);
+      transcriptResult(transcriptMatches ? result.transcription : { status: 'unavailable', code: 'integrity_mismatch' }, result.content, result.fixture);
       if (review) {
         const displayMatches = $('transcript').textContent === result.transcription.text;
         if (!displayMatches) { resetReview(); $('transcript-status').textContent = 'Text mismatch. Wording checks are disabled.'; }
@@ -254,7 +264,9 @@ $('upload-form').addEventListener('submit', async event => {
       }
       $('auth-result').focus();
     }
-  } catch { serviceFailure(); }
+  } catch (error) {
+    serviceFailure(activeRequest?.signal.aborted || ['AbortError', 'TimeoutError'].includes(error?.name) ? 'client_timeout' : error?.name === 'SyntaxError' ? 'response_invalid' : 'client_request_failed');
+  }
   finally { clearTimeout(timeout); activeRequest = null; busy = false; updateControls(); }
 });
 window.addEventListener('pagehide', () => { activeRequest?.abort(); clearPreview(); });

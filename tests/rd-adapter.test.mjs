@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { mapRealityDefenderResult } from '../lib/rd-result.mjs';
-import { detectManipulation } from '../lib/providers.mjs';
+import { mapRealityDefenderResult, sanitizedRealityDefenderStatus } from '../lib/rd-result.mjs';
+import { detectManipulation, providerFailure, logProviderFailure } from '../lib/providers.mjs';
 const require = createRequire(import.meta.url);
 const sdkDirectory = dirname(require.resolve('@realitydefender/realitydefender'));
 const { formatResult, getDetectionResult } = require(join(sdkDirectory, 'detection/results.js'));
@@ -85,4 +85,24 @@ test('adapter preserves failures without retry or leaking worker details', async
     assert.equal(calls, 1);
   }
   await assert.rejects(detectManipulation({}, '', { worker: () => assert.fail('worker called') }), { code: 'missing_key' });
+});
+
+test('unsupported SDK status survives worker-adapter-API-log boundaries without a verdict or raw details', async () => {
+  for (const status of ['NOT_APPLICABLE', 'UNCERTAIN', 'A'.repeat(40), 'A'.repeat(41), 'private status', 'https://private.invalid', 'SECRET\nHEADER', null]) {
+    let calls = 0;
+    await assert.rejects(detectManipulation({ filePath: 'temporary.wav' }, 'test-only', {
+      worker: async () => { calls++; return { outcome: 'response_received', error: 'unsupported_status', providerStatus: status,
+        responseFields: { secret: 'private' }, score: 0.99, message: 'private details' }; },
+    }), error => {
+      const safe = sanitizedRealityDefenderStatus(status);
+      const result = providerFailure(error); const logs = [];
+      logProviderFailure('reality_defender', error, line => logs.push(line));
+      assert.equal(result.code, 'unsupported_status'); assert.equal(result.label, 'Analysis unavailable');
+      assert.equal(result.providerStatus, safe || undefined);
+      assert.equal(JSON.parse(logs[0]).providerStatus, safe);
+      assert.doesNotMatch(JSON.stringify(result) + logs[0], /private|SECRET|score|responseFields/);
+      return true;
+    });
+    assert.equal(calls, 1);
+  }
 });

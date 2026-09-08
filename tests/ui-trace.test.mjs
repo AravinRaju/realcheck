@@ -30,7 +30,7 @@ class Element {
   querySelectorAll(tag) { return this.children.filter(child => child.tag === tag); }
   focus() {} pause() {} load() {}
 }
-async function harness({ tamper = value => value, responses = ['Send me the verification code.'], panel = false, configReply } = {}) {
+async function harness({ tamper = value => value, responses = ['Send me the verification code.'], panel = false, configReply, uploadReply } = {}) {
   const elements = new Map();
   const get = id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   let requests = 0, lastResponse, sentBytesMatched = false;
@@ -51,6 +51,7 @@ async function harness({ tamper = value => value, responses = ['Send me the veri
       if (panel) { assert.ok(url.startsWith('http://127.0.0.1:3001/')); url = new URL(url).pathname; }
       if (url === '/api/config') return configReply ? configReply() : Response.json({ mode: 'live', clientRequestTimeoutMs: 105000, detectionConfigured: true, transcriptionConfigured: true, sidePanel: { protocol: 1, configured: true, authorized: true } });
       assert.equal(url, '/api/analyze');
+      if (uploadReply) { requests++; return uploadReply(); }
       assert.equal(init.headers['X-Fixture-Transcript'], undefined);
       const bytes = Buffer.from(await init.body.arrayBuffer());
       const expected = hash(bytes), text = responses[Math.min(requests++, responses.length - 1)];
@@ -98,13 +99,68 @@ test('website and built panel display only sanitized transcription failure codes
     for (const code of ['http_400', 'http_429', 'timeout', 'network', 'invalid_response', 'private transcript <script>']) {
       const ui = await harness({ panel, tamper: result => ({ ...result, transcription: { status: 'unavailable', code } }) });
       await ui.choose(); const audio = ui.get('media-preview').children[0]; await ui.submit();
-      const expected = code.startsWith('private') ? 'internal' : code;
+      const expected = code.startsWith('private') ? 'unknown_failure_code' : code;
       assert.ok(ui.get('transcript-error-detail').textContent.includes('Failure code: ' + expected + '.'));
       assert.doesNotMatch(ui.get('transcript-error-detail').textContent, /private|<script>/);
       assert.equal(ui.get('auth-label').textContent, 'Unlikely deepfake');
       assert.equal(ui.get('check-wording').disabled, true); assert.equal(ui.get('review-confirm').checked, false);
       assert.equal(ui.get('media-preview').children[0], audio); assert.equal(ui.facts().requests, 1);
     }
+  }
+});
+
+test('simultaneous unsupported RD status and Groq 401 remain distinct in website and panel', async () => {
+  for (const panel of [false, true]) {
+    const ui = await harness({ panel, tamper: result => ({ ...result,
+      authenticity: { status: 'unavailable', label: 'Analysis unavailable', code: 'unsupported_status', providerStatus: 'NOT_APPLICABLE' },
+      transcription: { status: 'unavailable', label: 'Analysis unavailable', code: 'http_401' },
+    }) });
+    await ui.choose(); await ui.submit();
+    assert.match(ui.get('auth-detail').textContent, /Failure code: unsupported_status\./);
+    assert.match(ui.get('auth-detail').textContent, /SDK status: NOT_APPLICABLE\./);
+    assert.match(ui.get('transcript-error-detail').textContent, /Failure code: http_401\./);
+    assert.doesNotMatch(ui.get('auth-detail').textContent + ui.get('transcript-error-detail').textContent, /internal/);
+    assert.equal(ui.get('auth-label').textContent, 'Analysis unavailable');
+    assert.equal(ui.get('check-wording').disabled, true); assert.equal(ui.facts().requests, 1);
+  }
+});
+
+test('client response rejection no longer masquerades as an internal provider failure', async () => {
+  for (const panel of [false, true]) {
+    const ui = await harness({ panel, tamper: result => ({ ...result,
+      trace: { ...result.trace, requestId: 'unmatched-request' },
+      transcription: { status: 'unavailable', code: 'http_401' },
+    }) });
+    await ui.choose(); await ui.submit();
+    assert.match(ui.get('transcript-error-detail').textContent, /Failure code: response_mismatch\./);
+    assert.doesNotMatch(ui.get('transcript-error-detail').textContent, /internal|http_401/);
+    assert.equal(ui.get('check-wording').disabled, true);
+  }
+});
+
+test('UI distinguishes client timeout, transport failure and invalid JSON without exposing raw errors', async () => {
+  for (const [uploadReply, code] of [
+    [() => { throw new DOMException('private details', 'TimeoutError'); }, 'client_timeout'],
+    [() => { throw new TypeError('private details'); }, 'client_request_failed'],
+    [() => new Response('private invalid JSON'), 'response_invalid'],
+    [() => Response.json({ error: 'private server error' }, { status: 503 }), 'request_rejected'],
+  ]) {
+    const ui = await harness({ uploadReply }); await ui.choose(); await ui.submit();
+    assert.ok(ui.get('transcript-error-detail').textContent.includes('Failure code: ' + code + '.'));
+    assert.doesNotMatch(ui.get('transcript-error-detail').textContent, /private|internal/);
+    assert.equal(ui.get('check-wording').disabled, true); assert.equal(ui.facts().requests, 1);
+  }
+});
+
+test('UI rejects unsafe SDK status tokens and distinguishes missing/unknown codes', async () => {
+  for (const code of [undefined, 'private failure']) {
+    const ui = await harness({ tamper: result => ({ ...result,
+      authenticity: { status: 'unavailable', code: 'unsupported_status', providerStatus: 'PRIVATE\nDETAILS' },
+      transcription: { status: 'unavailable', code },
+    }) });
+    await ui.choose(); await ui.submit();
+    assert.doesNotMatch(ui.get('auth-detail').textContent, /PRIVATE|SDK status:/);
+    assert.ok(ui.get('transcript-error-detail').textContent.includes(code === undefined ? 'missing_failure_code' : 'unknown_failure_code'));
   }
 });
 test('panel displays the failed configuration step without leaking raw errors or submitting media', async () => {
